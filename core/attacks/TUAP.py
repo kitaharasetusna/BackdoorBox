@@ -15,7 +15,7 @@ from torchvision.transforms import Compose
 import torchvision.transforms as transforms
 import numpy as np
 import copy
-from torch.autograd.gradcheck import zero_gradients
+# from torch.autograd.gradcheck import zero_gradients
 import torchvision
 
 import torch
@@ -24,6 +24,14 @@ from torch.autograd import Variable
 
 from .base import *
 
+def zero_gradients(x):
+    if isinstance(x, torch.Tensor):
+        if x.grad is not None:
+            x.grad.detach_()
+            x.grad.zero_()
+    elif isinstance(x, collections.abc.Iterable):
+        for elem in x:
+            zero_gradients(elem)
 
 class AddTrigger:
     # blend 

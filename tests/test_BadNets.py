@@ -12,6 +12,8 @@ import torchvision
 from torchvision.datasets import DatasetFolder
 from torchvision.transforms import Compose, ToTensor, RandomHorizontalFlip, ToPILImage, Resize
 
+import sys
+sys.path.append('..')
 import core
 
 
@@ -62,7 +64,7 @@ schedule = {
 
     'benign_training': False,
     'batch_size': 1024,
-    'num_workers': 4,
+    'num_workers': 0,
 
     'lr': 0.1,
     'momentum': 0.9,
@@ -122,7 +124,7 @@ schedule = {
 
     'benign_training': False,
     'batch_size': 1024,
-    'num_workers': 4,
+    'num_workers': 0,
 
     'lr': 0.1,
     'momentum': 0.9,
@@ -198,7 +200,7 @@ schedule = {
 
     'benign_training': False,
     'batch_size': 1024,
-    'num_workers': 4,
+    'num_workers': 1,
 
     'lr': 0.01,
     'momentum': 0.9,

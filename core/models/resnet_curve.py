@@ -9,7 +9,10 @@ import sys, os
 sys.path.append(os.path.join(os.getcwd(), 'core/models'))
 import torch.nn as nn
 import torch.nn.functional as F
-import curves
+
+import sys
+sys.path.append('..')
+import core.models.curves
 import math
 
 class BasicBlockCurves(nn.Module):
