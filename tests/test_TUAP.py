@@ -16,6 +16,9 @@ from torchvision.transforms import Compose, ToTensor, PILToTensor, RandomHorizon
 import torchvision.transforms as transforms
 from torchvision.datasets import DatasetFolder
 
+
+import sys
+sys.path.append('..')
 import core
 from core.attacks.TUAP import TUAP
 
@@ -29,90 +32,90 @@ torch.manual_seed(global_seed)
 
 
 # ============== TUAP attack BaselineMNISTNetwork on MNIST ==============
-dataset = torchvision.datasets.MNIST
+# dataset = torchvision.datasets.MNIST
 
-transform_train = Compose([
-    ToTensor()
-])
-trainset = dataset(datasets_root_dir, train=True, transform=transform_train, download=True)
-print("trainset",len(trainset))
-transform_test = Compose([
-    ToTensor()
-])
-testset = dataset(datasets_root_dir, train=False, transform=transform_test, download=True)
-print("testset",len(testset))
-
-
-schedule = {
-    'device': 'GPU',
-    'CUDA_VISIBLE_DEVICES': CUDA_VISIBLE_DEVICES,
-    'GPU_num': 1,
-
-    'benign_training': False, # Train Attacked Model
-    'batch_size': 1024,
-    'num_workers': 8,
-
-    'lr': 0.1,
-    'momentum': 0.9,
-    'weight_decay': 5e-4,
-    'gamma': 0.1,
-    'schedule': [150, 180],
-
-    'epochs': 200,
-
-    'log_iteration_interval': 100,
-    'test_epoch_interval': 10,
-    'save_epoch_interval': 10,
-
-    'save_dir': 'experiments',
-    'experiment_name': 'BaselineMNISTNetwork_MNIST_TUAP'
-}
+# transform_train = Compose([
+#     ToTensor()
+# ])
+# trainset = dataset(datasets_root_dir, train=True, transform=transform_train, download=True)
+# print("trainset",len(trainset))
+# transform_test = Compose([
+#     ToTensor()
+# ])
+# testset = dataset(datasets_root_dir, train=False, transform=transform_test, download=True)
+# print("testset",len(testset))
 
 
-UAP_benign_model = core.models.BaselineMNISTNetwork()
-UAP_benign_PATH = './benign_MNIST/MNIST/ckpt_epoch_20.pth'
-checkpoint = torch.load(UAP_benign_PATH)
-UAP_benign_model.load_state_dict(checkpoint)
+# schedule = {
+#     'device': 'GPU',
+#     'CUDA_VISIBLE_DEVICES': CUDA_VISIBLE_DEVICES,
+#     'GPU_num': 1,
 
-poisoned_rate = 0.25
-# epsilon = 76.0/255
-epsilon = 0.3
-delta = 0.2
-max_iter_uni = np.inf
-p_norm = np.inf
-num_classes = 10
-overshoot = 0.02
-max_iter_df = 50
-p_samples = 0.01
-mask = np.ones((1, 28, 28))
+#     'benign_training': False, # Train Attacked Model
+#     'batch_size': 1024,
+#     'num_workers': 0,
 
-tuap = core.TUAP(
-    train_dataset=trainset,
-    test_dataset=testset,
-    model=core.models.BaselineMNISTNetwork(),
-    loss=nn.CrossEntropyLoss(),
+#     'lr': 0.1,
+#     'momentum': 0.9,
+#     'weight_decay': 5e-4,
+#     'gamma': 0.1,
+#     'schedule': [150, 180],
 
-    benign_model=UAP_benign_model,
-    y_target=2,
-    poisoned_rate=poisoned_rate,
-    epsilon = epsilon,
-    delta=delta,
-    max_iter_uni=max_iter_uni,
-    p_norm=p_norm,
-    num_classes=num_classes,
-    overshoot=overshoot,
-    max_iter_df=max_iter_df,
-    p_samples=p_samples,
-    mask=mask,
+#     'epochs': 200,
+
+#     'log_iteration_interval': 100,
+#     'test_epoch_interval': 10,
+#     'save_epoch_interval': 10,
+
+#     'save_dir': 'experiments',
+#     'experiment_name': 'BaselineMNISTNetwork_MNIST_TUAP'
+# }
+
+
+# UAP_benign_model = core.models.BaselineMNISTNetwork()
+# UAP_benign_PATH = './benign_MNIST/MNIST/ckpt_epoch_20.pth'
+# checkpoint = torch.load(UAP_benign_PATH)
+# UAP_benign_model.load_state_dict(checkpoint)
+
+# poisoned_rate = 0.25
+# # epsilon = 76.0/255
+# epsilon = 0.3
+# delta = 0.2
+# max_iter_uni = np.inf
+# p_norm = np.inf
+# num_classes = 10
+# overshoot = 0.02
+# max_iter_df = 50
+# p_samples = 0.01
+# mask = np.ones((1, 28, 28))
+
+# tuap = core.TUAP(
+#     train_dataset=trainset,
+#     test_dataset=testset,
+#     model=core.models.BaselineMNISTNetwork(),
+#     loss=nn.CrossEntropyLoss(),
+
+#     benign_model=UAP_benign_model,
+#     y_target=2,
+#     poisoned_rate=poisoned_rate,
+#     epsilon = epsilon,
+#     delta=delta,
+#     max_iter_uni=max_iter_uni,
+#     p_norm=p_norm,
+#     num_classes=num_classes,
+#     overshoot=overshoot,
+#     max_iter_df=max_iter_df,
+#     p_samples=p_samples,
+#     mask=mask,
     
-    poisoned_transform_train_index=0,
-    poisoned_transform_test_index=0,
-    poisoned_target_transform_index=0,
-    schedule=schedule,
-    seed=global_seed,
-    deterministic=True
-)
-tuap.train()
+#     poisoned_transform_train_index=0,
+#     poisoned_transform_test_index=0,
+#     poisoned_target_transform_index=0,
+#     schedule=schedule,
+#     seed=global_seed,
+#     deterministic=True
+# )
+# tuap.train()
 
 
 # ==============TUAP attack ResNet-18 on CIFAR-10 ==============
@@ -137,7 +140,7 @@ schedule = {
 
     'benign_training': False, # Train Attacked Model
     'batch_size': 128,
-    'num_workers': 8,
+    'num_workers': 0,
 
     'lr': 0.1,
     'momentum': 0.9,
@@ -171,6 +174,62 @@ max_iter_df = 50
 p_samples = 0.01
 mask = np.ones((3, 32, 32))
 
+schedule_benign = {
+    'device': 'GPU',
+    'CUDA_VISIBLE_DEVICES': CUDA_VISIBLE_DEVICES,
+    'GPU_num': 1,
+
+    'benign_training': False, # Train Attacked Model
+    'batch_size': 128,
+    'num_workers': 0,
+
+    'lr': 0.1,
+    'momentum': 0.9,
+    'weight_decay': 5e-4,
+    'gamma': 0.1,
+    'schedule': [150, 180],
+
+    'epochs': 200,
+
+    'log_iteration_interval': 100,
+    'test_epoch_interval': 10,
+    'save_epoch_interval': 10,
+
+    'save_dir': 'experiments',
+    'experiment_name': 'ResNet-18_CIFAR-10_TUAP'
+}
+
+
+# benign training:  begin
+tuap = core.TUAP(
+    train_dataset=trainset,
+    test_dataset=testset,
+    model=core.models.ResNet(18),
+    loss=nn.CrossEntropyLoss(),
+
+    benign_model=UAP_benign_model,
+    y_target=2,
+    poisoned_rate=poisoned_rate,
+    epsilon = epsilon,
+    delta=delta,
+    max_iter_uni=max_iter_uni,
+    p_norm=p_norm,
+    num_classes=num_classes,
+    overshoot=overshoot,
+    max_iter_df=max_iter_df,
+    p_samples=p_samples,
+    mask=mask,
+
+    poisoned_transform_train_index=0,
+    poisoned_transform_test_index=0,
+    poisoned_target_transform_index=0,
+    schedule=schedule_benign,
+    seed=global_seed,
+    deterministic=True
+)
+
+tuap.train()
+# benign training: end 
 
 tuap = core.TUAP(
     train_dataset=trainset,
@@ -202,7 +261,7 @@ tuap = core.TUAP(
 tuap.train()
 
 
-
+import sys; sys.exit()
 # ============== TUAP attack ResNet-18 on GTSRB ==============
 transform_train = Compose([
     transforms.ToPILImage(),
