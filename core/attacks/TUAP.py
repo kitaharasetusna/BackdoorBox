@@ -554,6 +554,7 @@ class UAP:
         """
         f_image = self.model(Variable(image[None, :, :, :], requires_grad=True)).data.cpu().numpy().flatten()  # [10,]
         I = f_image.argsort()[::-1]
+        # I = f_image.argsort()[::-1].flip(dims=[0])
 
         I = I[0:num_classes]
         clean_label = I[0]

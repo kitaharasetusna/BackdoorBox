@@ -165,7 +165,7 @@ UAP_benign_model.load_state_dict(checkpoint)
 poisoned_rate = 0.25
 # epsilon = 10
 epsilon = 0.031
-delta = 0.2
+delta = 0.3
 max_iter_uni = np.inf
 p_norm = np.inf
 num_classes = 10

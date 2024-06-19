@@ -400,7 +400,7 @@ class IAD(Base):
         schedulerM = torch.optim.lr_scheduler.MultiStepLR(optimizerM, self.current_schedule['milestones_M'], self.current_schedule['lambda_M'])
 
         # The path to save log files and checkpoints
-        work_dir = osp.join(self.current_schedule['save_dir'], self.current_schedule['experiment_name'] + '_' + time.strftime("%Y-%m-%d_%H:%M:%S", time.localtime()))
+        work_dir = osp.join(self.current_schedule['save_dir'], self.current_schedule['experiment_name'] + '_' + time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime()))
         os.makedirs(work_dir, exist_ok=True)
         log = Log(osp.join(work_dir, 'log.txt'))
         self.work_dir = work_dir
@@ -653,6 +653,7 @@ class IAD(Base):
 
             # Saving images for debugging
             if batch_idx == len(train_dl1) - 2:
+                print(inputs[:num_bd].shape, inputs_bd.shape); import sys; sys.exit()
                 images = modelG.denormalize_pattern(torch.cat((inputs1[:num_bd], inputs_bd), dim=2))
                 file_name = "{}_images.png".format(self.dataset_name)
                 file_path = os.path.join(self.work_dir, file_name)
