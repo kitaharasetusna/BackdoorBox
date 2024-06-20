@@ -670,7 +670,8 @@ class IAD(Base):
         model=None,
         modelG=None,
         modelM=None,
-        schedule=None
+        schedule=None,
+        work_dir=None
     ):
         """Test the victim model.
         
@@ -774,7 +775,7 @@ class IAD(Base):
                 if batch_idx == len(test_dl1) - 2:
                     images = modelG.denormalize_pattern(torch.cat((inputs1[:18], inputs_bd[:18]), dim=2))
                     file_name = "{}_images_test.png".format(self.dataset_name)
-                    file_path = os.path.join(self.work_dir, file_name)
+                    file_path = os.path.join(self.work_dir if work_dir==None else work_dir, file_name)
                     torchvision.utils.save_image(images, file_path, normalize=True, pad_value=1)
         
         return avg_acc_clean, avg_acc_bd, avg_acc_cross
