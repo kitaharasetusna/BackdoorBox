@@ -419,7 +419,7 @@ class IAD(Base):
         # The backdoor trigger mask generator will be trained independently first in early epochs 
         if epoch == 1:
             self.modelM.train()
-            for i in range(25):
+            for i in range(self.current_schedule['epochs_M']):
                 msg = "Epoch {} | mask_density: {} | - {}  - lambda_div: {}  - lambda_norm: {}\n".format(
                         epoch, self.mask_density, self.dataset_name, self.lambda_div, self.lambda_norm
                     )
@@ -653,8 +653,8 @@ class IAD(Base):
 
             # Saving images for debugging
             if batch_idx == len(train_dl1) - 2:
-                print(inputs[:num_bd].shape, inputs_bd.shape); import sys; sys.exit()
                 images = modelG.denormalize_pattern(torch.cat((inputs1[:num_bd], inputs_bd), dim=2))
+                print(images.shape, inputs1.shape, num_bd, inputs_bd.shape)
                 file_name = "{}_images.png".format(self.dataset_name)
                 file_path = os.path.join(self.work_dir, file_name)
                 torchvision.utils.save_image(images, file_path, normalize=True, pad_value=1)
@@ -769,6 +769,13 @@ class IAD(Base):
                 avg_acc_clean = total_correct_clean * 100.0 / total
                 avg_acc_cross = total_correct_cross * 100.0 / total
                 avg_acc_bd = total_correct_bd * 100.0 / total
+
+                # Saving images for debugging
+                if batch_idx == len(test_dl1) - 2:
+                    images = modelG.denormalize_pattern(torch.cat((inputs1[:18], inputs_bd[:18]), dim=2))
+                    file_name = "{}_images_test.png".format(self.dataset_name)
+                    file_path = os.path.join(self.work_dir, file_name)
+                    torchvision.utils.save_image(images, file_path, normalize=True, pad_value=1)
         
         return avg_acc_clean, avg_acc_bd, avg_acc_cross
 

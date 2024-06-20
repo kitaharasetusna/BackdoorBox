@@ -87,13 +87,13 @@ schedule = {
     'lambda_M': 0.1,
     
     'epochs': 600,
-    'epochs_M': 25,
+    'epochs_M': 2, # default value: 25
 
     'log_iteration_interval': 100,
     'test_epoch_interval': 10,
     'save_epoch_interval': 10,
 
-    'save_dir': 'experiments',
+    'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD'
 }
 
