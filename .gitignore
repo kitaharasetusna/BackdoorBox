@@ -20,4 +20,4 @@ mytest/
 ./test2.py
 ./result
 ./experiments
-./benign_CIFAR10
+./benign_CIFAR10/*

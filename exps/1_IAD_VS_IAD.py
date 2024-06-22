@@ -97,22 +97,22 @@ testset1 = CIFAR10(
     train=False,
     download=True)
 
-train_loader = DataLoader(
-    trainset,
-    batch_size=settings_['batch_size'],
-    shuffle=True,
-    num_workers=0,
-    drop_last=True,
-    worker_init_fn=_seed_worker
-)
-train_loader1 = DataLoader(
-    trainset1,
-    batch_size=settings_['batch_size'],
-    shuffle=True,
-    num_workers=0,
-    drop_last=True,
-    worker_init_fn=_seed_worker
-)
+# train_loader = DataLoader(
+#     trainset,
+#     batch_size=settings_['batch_size'],
+#     shuffle=True,
+#     num_workers=0,
+#     drop_last=True,
+#     worker_init_fn=_seed_worker
+# )
+# train_loader1 = DataLoader(
+#     trainset1,
+#     batch_size=settings_['batch_size'],
+#     shuffle=True,
+#     num_workers=0,
+#     drop_last=True,
+#     worker_init_fn=_seed_worker
+# )
 test_loader = DataLoader(
     testset,
     batch_size=settings_['batch_size'],
@@ -195,10 +195,137 @@ avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
     work_dir=folder_name
 )
 
-freeze_model(model_G); freeze_model(model_M); model.train()
-print(f'ASR of IAD: {avg_acc_bd.item()}')
+freeze_model(model_G); freeze_model(model_M); freeze_model(model)
+print(f'ASR of IAD: {avg_acc_bd.item(): .2f}')
+del test_loader; del test_loader1 
+# -----------------------------TODO: fine-tuning it using another backdoor--------------------------------
+global_seed = 666
+deterministic = False
+torch.manual_seed(global_seed)
+def read_image(img_path, type=None):
+    img = cv2.imread(img_path)
+    if type is None:        
+        return img
+    elif isinstance(type,str) and type.upper() == "RGB":
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    elif isinstance(type,str) and type.upper() == "GRAY":
+        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        raise NotImplementedError
 
-# TODO: fine-tuning it using another backdoor
+
+class GetPoisonedDataset(torch.utils.data.Dataset):
+    """Construct a dataset.
+
+    Args:
+        data_list (list): the list of data.
+        labels (list): the list of label.
+    """
+    def __init__(self, data_list, labels):
+        self.data_list = data_list
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, index):
+        img = torch.FloatTensor(self.data_list[index])
+        label = torch.FloatTensor(self.labels[index])
+        return img, label
 
 
+secret_size = 20
+train_data_set = []
+train_secret_set = []
+for idx, (img, lab) in enumerate(trainset):
+    train_data_set.append(img.tolist())
+    secret = np.random.binomial(1, .5, secret_size).tolist()
+    train_secret_set.append(secret)
 
+
+for idx, (img, lab) in enumerate(testset):
+    train_data_set.append(img.tolist())
+    secret = np.random.binomial(1, .5, secret_size).tolist()
+    train_secret_set.append(secret)
+
+train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
+
+schedule = {
+    'device': 'GPU',
+    'CUDA_VISIBLE_DEVICES': '1',
+    'GPU_num': 1,
+
+    'benign_training': False,
+    'batch_size': 128,
+    'num_workers': 0,
+
+    'lr': 0.1,
+    'momentum': 0.9,
+    'weight_decay': 5e-4,
+    'gamma': 0.1,
+    'schedule': [150, 180],
+
+    'epochs': 5,
+
+    'log_iteration_interval': 100,
+    'test_epoch_interval': 10,
+    'save_epoch_interval': 100,
+
+    'save_dir': '../experiments',
+    'experiment_name': 'train_poison_DataFolder_CIFAR10_ISSBA_vs_IAD'
+}
+
+encoder_schedule = {
+    'secret_size': secret_size,
+    'enc_height': 32,
+    'enc_width': 32,
+    'enc_in_channel': 3,
+    'enc_total_epoch': 20,
+    'enc_secret_only_epoch': 2,
+    'enc_use_dis': False,
+}
+
+
+# Configure the attack scheme
+ISSBA = core.ISSBA(
+    dataset_name="cifar10",
+    train_dataset=trainset,
+    test_dataset=testset,
+    train_steg_set=train_steg_set,
+    model=model,
+    loss=nn.CrossEntropyLoss(),
+    y_target=2, # benign backdoor label 1
+    poisoned_rate=0.05,      # follow the default configure in the original paper
+    encoder_schedule=encoder_schedule,
+    encoder=None,
+    schedule=schedule,
+    seed=global_seed,
+    deterministic=deterministic
+)
+ISSBA.train(schedule=schedule)
+avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+    test_loader,
+    test_loader1,
+    model,
+    model_G,
+    model_M,
+    work_dir=folder_name
+)
+test_loader = DataLoader(
+    testset,
+    batch_size=settings_['batch_size'],
+    shuffle=False,
+    num_workers=0,
+    drop_last=False,
+    worker_init_fn=_seed_worker
+)
+test_loader1 = DataLoader(
+    testset1,
+    batch_size=settings_['batch_size'],
+    shuffle=True,
+    num_workers=0,
+    drop_last=False,
+    worker_init_fn=_seed_worker
+)
+# freeze_model(model_G); freeze_model(model_M); model.train()
+print(f'ASR of IAD (after): {avg_acc_bd.item(): .2f}')

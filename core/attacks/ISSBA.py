@@ -805,7 +805,7 @@ class ISSBA(Base):
         if self.dataset_name == 'cifar10':
             self.post_transforms = PostTensorTransform(self.dataset_name).to(self.device)
 
-        self.work_dir = osp.join(self.current_schedule['save_dir'], self.current_schedule['experiment_name'] + '_' + time.strftime("%Y-%m-%d_%H:%M:%S", time.localtime()))
+        self.work_dir = osp.join(self.current_schedule['save_dir'], self.current_schedule['experiment_name'] + '_' + time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime()))
         os.makedirs(self.work_dir, exist_ok=True)
         self.log = Log(osp.join(self.work_dir, 'log.txt'))
 
