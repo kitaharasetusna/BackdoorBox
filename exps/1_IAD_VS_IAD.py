@@ -27,13 +27,13 @@ def freeze_model(model):
 
 
 global_seed = 666
-deterministic = True
+deterministic = False 
 torch.manual_seed(global_seed)
 
 settings_ = {
     'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD',
-    'experiment_time': '_2024-06-19_17-44-59',
+    'experiment_time': '_2024-06-23_16-34-09',
     'dataset_name' : 'cifar10',
     'batch_size': 128,
     'load_epoch': 10,
@@ -132,7 +132,7 @@ test_loader1 = DataLoader(
 
 schedule = {
     'device': 'GPU',
-    'CUDA_VISIBLE_DEVICES': '1',
+    'CUDA_VISIBLE_DEVICES': '0',
     'GPU_num': 1,
 
     'benign_training': False,
@@ -252,7 +252,7 @@ train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
 
 schedule = {
     'device': 'GPU',
-    'CUDA_VISIBLE_DEVICES': '1',
+    'CUDA_VISIBLE_DEVICES': '0',
     'GPU_num': 1,
 
     'benign_training': False,

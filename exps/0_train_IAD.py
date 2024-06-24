@@ -63,7 +63,7 @@ testset1 = CIFAR10(
 
 schedule = {
     'device': 'GPU',
-    'CUDA_VISIBLE_DEVICES': '1',
+    'CUDA_VISIBLE_DEVICES': '0',
     'GPU_num': 1,
 
     'benign_training': False,

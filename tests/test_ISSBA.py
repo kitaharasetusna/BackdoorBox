@@ -212,7 +212,7 @@ train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
 
 schedule = {
     'device': 'GPU',
-    'CUDA_VISIBLE_DEVICES': '1',
+    'CUDA_VISIBLE_DEVICES': '0',
     'GPU_num': 1,
 
     'benign_training': False,
@@ -231,7 +231,7 @@ schedule = {
     'test_epoch_interval': 10,
     'save_epoch_interval': 100,
 
-    'save_dir': 'experiments',
+    'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_ISSBA'
 }
 
@@ -240,7 +240,7 @@ encoder_schedule = {
     'enc_height': 32,
     'enc_width': 32,
     'enc_in_channel': 3,
-    'enc_total_epoch': 20,
+    'enc_total_epoch': 5, # default 20
     'enc_secret_only_epoch': 2,
     'enc_use_dis': False,
 }
