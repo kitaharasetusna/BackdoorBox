@@ -199,9 +199,13 @@ freeze_model(model_G); freeze_model(model_M); freeze_model(model)
 print(f'ASR of IAD: {avg_acc_bd.item(): .2f}')
 del test_loader; del test_loader1 
 # -----------------------------TODO: fine-tuning it using another backdoor--------------------------------
+# ===== Train backdoored model on CIFAR10 using with CIFAR10 ===== 
+
 global_seed = 666
 deterministic = False
 torch.manual_seed(global_seed)
+
+
 def read_image(img_path, type=None):
     img = cv2.imread(img_path)
     if type is None:        
@@ -233,8 +237,33 @@ class GetPoisonedDataset(torch.utils.data.Dataset):
         label = torch.FloatTensor(self.labels[index])
         return img, label
 
+# Prepare datasets and follow the default data augmentation in the original paper
+transform_train = Compose([
+    transforms.Resize((32, 32)),
+    RandomHorizontalFlip(),
+    ToTensor(),
+])
+transform_test = Compose([
+    transforms.Resize((32, 32)),
+    ToTensor(),
+])
+
+trainset = CIFAR10(
+    root='../datasets', # please replace this with path to your dataset
+    transform=transform_train,
+    target_transform=None,
+    train=True,
+    download=True)
+testset = CIFAR10(
+    root='../datasets', # please replace this with path to your dataset
+    transform=transform_test,
+    target_transform=None,
+    train=False,
+    download=True)
+
 
 secret_size = 20
+
 train_data_set = []
 train_secret_set = []
 for idx, (img, lab) in enumerate(trainset):
@@ -248,7 +277,9 @@ for idx, (img, lab) in enumerate(testset):
     secret = np.random.binomial(1, .5, secret_size).tolist()
     train_secret_set.append(secret)
 
+
 train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
+
 
 schedule = {
     'device': 'GPU',
@@ -265,14 +296,15 @@ schedule = {
     'gamma': 0.1,
     'schedule': [150, 180],
 
-    'epochs': 5,
+    'epochs': 10,
 
     'log_iteration_interval': 100,
     'test_epoch_interval': 10,
     'save_epoch_interval': 100,
+    'pretrain': pth_path,
 
     'save_dir': '../experiments',
-    'experiment_name': 'train_poison_DataFolder_CIFAR10_ISSBA_vs_IAD'
+    'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD_vs_ISSBA' #: 1
 }
 
 encoder_schedule = {
@@ -280,11 +312,10 @@ encoder_schedule = {
     'enc_height': 32,
     'enc_width': 32,
     'enc_in_channel': 3,
-    'enc_total_epoch': 20,
+    'enc_total_epoch': 5, # default 20
     'enc_secret_only_epoch': 2,
     'enc_use_dis': False,
 }
-
 
 # Configure the attack scheme
 ISSBA = core.ISSBA(
@@ -292,9 +323,9 @@ ISSBA = core.ISSBA(
     train_dataset=trainset,
     test_dataset=testset,
     train_steg_set=train_steg_set,
-    model=model,
+    model=core.models.ResNet(18),
     loss=nn.CrossEntropyLoss(),
-    y_target=2, # benign backdoor label 1
+    y_target=2,
     poisoned_rate=0.05,      # follow the default configure in the original paper
     encoder_schedule=encoder_schedule,
     encoder=None,
@@ -302,15 +333,13 @@ ISSBA = core.ISSBA(
     seed=global_seed,
     deterministic=deterministic
 )
+print(torch.cuda.device_count())
 ISSBA.train(schedule=schedule)
-avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
-    test_loader,
-    test_loader1,
-    model,
-    model_G,
-    model_M,
-    work_dir=folder_name
-)
+
+# ===== Train backdoored model on CIFAR10 using with CIFAR10 (done) ===== 
+
+
+
 test_loader = DataLoader(
     testset,
     batch_size=settings_['batch_size'],
@@ -327,5 +356,14 @@ test_loader1 = DataLoader(
     drop_last=False,
     worker_init_fn=_seed_worker
 )
+avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+    test_loader,
+    test_loader1,
+    ISSBA.model,
+    model_G,
+    model_M,
+    work_dir=folder_name
+)
+
 # freeze_model(model_G); freeze_model(model_M); model.train()
 print(f'ASR of IAD (after): {avg_acc_bd.item(): .2f}')

@@ -778,6 +778,7 @@ class ISSBA(Base):
             self.current_schedule = deepcopy(schedule)
 
         if 'pretrain' in self.current_schedule:
+            print(f'load model from {self.current_schedule["pretrain"]}')
             self.model.load_state_dict(torch.load(self.current_schedule['pretrain']), strict=False)
 
         # Use GPU
