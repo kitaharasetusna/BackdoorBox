@@ -195,7 +195,7 @@ avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
     work_dir=folder_name
 )
 
-freeze_model(model_G); freeze_model(model_M); freeze_model(model)
+freeze_model(model_G); freeze_model(model_M) 
 print(f'ASR of IAD: {avg_acc_bd.item(): .2f}')
 del test_loader; del test_loader1 
 # -----------------------------TODO: fine-tuning it using another backdoor--------------------------------
@@ -301,7 +301,7 @@ schedule = {
     'log_iteration_interval': 100,
     'test_epoch_interval': 10,
     'save_epoch_interval': 100,
-    'pretrain': pth_path,
+    # 'pretrain': pth_path,
 
     'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD_vs_ISSBA' #: 1
@@ -323,7 +323,7 @@ ISSBA = core.ISSBA(
     train_dataset=trainset,
     test_dataset=testset,
     train_steg_set=train_steg_set,
-    model=core.models.ResNet(18),
+    model=model,
     loss=nn.CrossEntropyLoss(),
     y_target=2,
     poisoned_rate=0.05,      # follow the default configure in the original paper
@@ -359,7 +359,7 @@ test_loader1 = DataLoader(
 avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
     test_loader,
     test_loader1,
-    ISSBA.model,
+    model,
     model_G,
     model_M,
     work_dir=folder_name
