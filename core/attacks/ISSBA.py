@@ -1133,7 +1133,7 @@ class ISSBA(Base):
             num_workers=8,
             worker_init_fn=self._seed_worker)
 
-        for _, (image_input, secret_input) in enumerate(train_dl):
+        for idx_btch, (image_input, secret_input) in enumerate(train_dl):
             image_input, secret_input = image_input.cuda(), secret_input.cuda()
             residual = encoder([secret_input, image_input])
             encoded_image = image_input + residual
@@ -1144,7 +1144,7 @@ class ISSBA(Base):
             image_input = image_input.detach().cpu().numpy().transpose(0, 2, 3, 1)[0]
             encoded_image = encoded_image.detach().cpu().numpy().transpose(0, 2, 3, 1)[0]
             residual = residual.detach().cpu().numpy().transpose(0, 2, 3, 1)[0]
-            imageio.imwrite(os.path.join(self.work_dir, 'image_input.jpg'), image_input)
-            imageio.imwrite(os.path.join(self.work_dir, 'encoded_image.jpg'), encoded_image)
-            imageio.imwrite(os.path.join(self.work_dir, 'residual.jpg'), residual)
+            imageio.imwrite(os.path.join(self.work_dir, f'{idx_btch}_image_input.jpg'), image_input)
+            imageio.imwrite(os.path.join(self.work_dir, f'{idx_btch}_encoded_image.jpg'), encoded_image)
+            imageio.imwrite(os.path.join(self.work_dir, f'{idx_btch}_residual.jpg'), residual)
             break

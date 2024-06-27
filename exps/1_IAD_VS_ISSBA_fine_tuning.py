@@ -17,6 +17,11 @@ sys.path.append('..')
 import core
 from core.attacks.IAD import Generator
 
+# TODO lists:
+# 1. change training IAD on the partial data
+# (currently it's trained on the whole data)
+
+
 def _seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
@@ -31,6 +36,7 @@ global_seed = 666
 deterministic = False 
 torch.manual_seed(global_seed)
 
+# ---------------------------------------------1. load and test IAD model----------------------------------
 settings_ = {
     'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD',
@@ -56,6 +62,7 @@ model.load_state_dict(state_dict[keys_[0]])
 model_G.load_state_dict(state_dict[keys_[1]])
 model_M.load_state_dict(state_dict[keys_[2]])
 
+freeze_model(model_G); freeze_model(model_M) 
 
 transform_train = Compose([
     transforms.Resize((32, 32)),
@@ -97,23 +104,6 @@ testset1 = CIFAR10(
     target_transform=None,
     train=False,
     download=True)
-
-# train_loader = DataLoader(
-#     trainset,
-#     batch_size=settings_['batch_size'],
-#     shuffle=True,
-#     num_workers=0,
-#     drop_last=True,
-#     worker_init_fn=_seed_worker
-# )
-# train_loader1 = DataLoader(
-#     trainset1,
-#     batch_size=settings_['batch_size'],
-#     shuffle=True,
-#     num_workers=0,
-#     drop_last=True,
-#     worker_init_fn=_seed_worker
-# )
 test_loader = DataLoader(
     testset,
     batch_size=settings_['batch_size'],
@@ -130,7 +120,6 @@ test_loader1 = DataLoader(
     drop_last=False,
     worker_init_fn=_seed_worker
 )
-
 schedule = {
     'device': 'GPU',
     'CUDA_VISIBLE_DEVICES': '0',
@@ -166,7 +155,6 @@ schedule = {
     'save_dir': '../experiments',
     'experiment_name': 'train_poison_DataFolder_CIFAR10_IAD'
 }
-
 IAD = core.IAD(
     dataset_name="cifar10",
     train_dataset=trainset,
@@ -203,8 +191,7 @@ print(f'ASR of IAD: {avg_acc_bd.item(): .2f}, ACC: {avg_acc_clean.item()}')
 
 
 del test_loader; del test_loader1
-# ----------------------------------------- fine-tuning vs ISSBA---------------------------------------
-# ----------------------------------------- copy 2 models (test IAD BSR sep)---------------------------
+# ---------------------------------------------1.1 load and test IAD model (safe data)----------------------------------
 trainset = CIFAR10(
     root='../datasets', # please replace this with path to your dataset
     transform=transform_train,
@@ -223,9 +210,6 @@ ft_subset_tr, _ = random_split(trainset, [subset_size, remaining_size])
 subset_size_te = int(len(testset) * 0.1)
 remaining_size_te = len(testset) - subset_size_te 
 ft_subset_te, _ = random_split(testset, [subset_size_te, remaining_size_te])
-
-
-
 
 test_loader_ft = DataLoader(
         ft_subset_tr,
@@ -252,11 +236,10 @@ avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
     work_dir=folder_name
 )
 
-print(f' ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+print(f'ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
 del test_loader1_ft; del test_loader_ft
-# -----------------------------fine-tuning it using another backdoor--------------------------------
 
-# ---------------------------------fine tuning it on the clean dataset------------------------------
+# ---------------------------------------------2. fine-tune IAD model on clean data----------------------------------
 layer=["full layers"]
 import copy
 model_clean = copy.deepcopy(model)
@@ -313,13 +296,13 @@ for ft_epochs in range(5):
     avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
         test_loader,
         test_loader1,
-        model_clean,
+        finetuning.model,
         model_G,
         model_M,
         work_dir=folder_name
     )
 
-    print(f'{ft_epochs} ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+    print(f'fine-tuning: {ft_epochs} ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
 
     test_loader_ft = DataLoader(
         ft_subset_tr,
@@ -351,8 +334,7 @@ for ft_epochs in range(5):
 
 del test_loader; del test_loader1; del test_loader1_ft; del test_loader_ft
 
-# -----------------------------TODO: change it to only parts of the training dataset----------------
-# ===== Train backdoored model on CIFAR10 using with CIFAR10 ===== 
+# ---------------------------------------------3. fine-tune IAD model on ISSBA data (partial)----------------------------------
 
 global_seed = 666
 deterministic = False
@@ -401,9 +383,6 @@ transform_test = Compose([
     ToTensor(),
 ])
 
-
-
-
 secret_size = 20
 
 train_data_set = []
@@ -412,17 +391,12 @@ for idx, (img, lab) in enumerate(ft_subset_tr):
     train_data_set.append(img.tolist())
     secret = np.random.binomial(1, .5, secret_size).tolist()
     train_secret_set.append(secret)
-
-
 for idx, (img, lab) in enumerate(ft_subset_te):
     train_data_set.append(img.tolist())
     secret = np.random.binomial(1, .5, secret_size).tolist()
     train_secret_set.append(secret)
 
-
 train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
-
-
 schedule = {
     'device': 'GPU',
     'CUDA_VISIBLE_DEVICES': '0',
@@ -499,7 +473,7 @@ for ft_epochs in range(5):
     avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
         test_loader,
         test_loader1,
-        model,
+        ISSBA.model,
         model_G,
         model_M,
         work_dir=folder_name
@@ -533,3 +507,5 @@ for ft_epochs in range(5):
     )
 
     print(f'{ft_epochs} ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+
+
