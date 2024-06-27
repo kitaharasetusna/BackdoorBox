@@ -123,7 +123,7 @@ def test_finetuning(model,p,trainset,testset,poisoned_testset,layer,y_target):
 
 # # ========== ResNet-18_CIFAR-10_Wanet_Finetuing ==========
 # print("wanet")
-# dataset = torchvision.datasets.CIFAR10
+dataset = torchvision.datasets.CIFAR10
 #
 #
 #
@@ -133,11 +133,11 @@ def test_finetuning(model,p,trainset,testset,poisoned_testset,layer,y_target):
 # ])
 # trainset = dataset('data', train=True, transform=transform_train, download=False)
 #
-# transform_test = Compose([
-#     ToTensor()
-# ])
-# testset = dataset('data', train=False, transform=transform_test, download=False)
-#
+transform_test = Compose([
+    ToTensor()
+])
+testset = dataset('data', train=False, transform=transform_test, download=False)
+
 #
 #
 # identity_grid,noise_grid=gen_grid(32,4)
@@ -202,46 +202,46 @@ def test_finetuning(model,p,trainset,testset,poisoned_testset,layer,y_target):
 # test_finetuning(model,p,testset,testset,testset,layer,y_target)
 #
 #
-# # ========== ResNet-18_CIFAR-10_Badnets_Finetuing ==========
-# print("badnets")
-# model = core.models.ResNet(18)
-#
-# attack_name = 'BadNets'
-# model_path = 'Badnets_Resnet18_Cifar10_666.pth.tar'
-#
-# pattern = torch.zeros((32, 32), dtype=torch.uint8)
-# pattern[-3:, -3:] = 255
-# weight = torch.zeros((32, 32), dtype=torch.float32)
-# weight[-3:, -3:] = 1.0
-#
-# attack = core.BadNets(
-#     train_dataset=trainset,
-#     test_dataset=testset,
-#     model=model,
-#     loss=nn.CrossEntropyLoss(),
-#     y_target=1,
-#     poisoned_rate=0.05,
-#     pattern=pattern,
-#     weight=weight,
-#     seed=global_seed,
-#     deterministic=deterministic
-# )
-# poisoned_trainset, poisoned_testset = attack.get_poisoned_dataset()
-#
-# #p is the rate of choosing the clean sample
-# p=0.1
-# #choose finetuning layers
-# layer=["full layers"]
-# #set the target label
-# y_target=1
-# model.load_state_dict(torch.load(model_path))
-#
-#
-# # test2(model,p,testset,testset,poisoned_testset,layer,y_target)
-# test_finetuning(model,p,testset,testset,poisoned_testset,layer,y_target)
-#
-#
-#
+# ========== ResNet-18_CIFAR-10_Badnets_Finetuing ==========
+print("badnets")
+model = core.models.ResNet(18)
+
+attack_name = 'BadNets'
+model_path = 'Badnets_Resnet18_Cifar10_666.pth.tar'
+
+pattern = torch.zeros((32, 32), dtype=torch.uint8)
+pattern[-3:, -3:] = 255
+weight = torch.zeros((32, 32), dtype=torch.float32)
+weight[-3:, -3:] = 1.0
+
+attack = core.BadNets(
+    train_dataset=trainset,
+    test_dataset=testset,
+    model=model,
+    loss=nn.CrossEntropyLoss(),
+    y_target=1,
+    poisoned_rate=0.05,
+    pattern=pattern,
+    weight=weight,
+    seed=global_seed,
+    deterministic=deterministic
+)
+poisoned_trainset, poisoned_testset = attack.get_poisoned_dataset()
+
+#p is the rate of choosing the clean sample
+p=0.1
+#choose finetuning layers
+layer=["full layers"]
+#set the target label
+y_target=1
+model.load_state_dict(torch.load(model_path))
+
+
+# test2(model,p,testset,testset,poisoned_testset,layer,y_target)
+test_finetuning(model,p,testset,testset,poisoned_testset,layer,y_target)
+
+
+
 # # ========== ResNet-18_CIFAR-10_Labelconsistent_Finetuing ==========
 # print("labelconsistent")
 # model = core.models.ResNet(18)

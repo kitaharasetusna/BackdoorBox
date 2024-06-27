@@ -58,10 +58,10 @@ class Base(object):
     """
 
     def __init__(self, train_dataset, test_dataset, model, loss, schedule=None, seed=0, deterministic=False):
-        assert isinstance(train_dataset, support_list), 'train_dataset is an unsupported dataset type, train_dataset should be a subclass of our support list.'
+        # assert isinstance(train_dataset, support_list), 'train_dataset is an unsupported dataset type, train_dataset should be a subclass of our support list.'
         self.train_dataset = train_dataset
 
-        assert isinstance(test_dataset, support_list), 'test_dataset is an unsupported dataset type, test_dataset should be a subclass of our support list.'
+        # assert isinstance(test_dataset, support_list), 'test_dataset is an unsupported dataset type, test_dataset should be a subclass of our support list.'
         self.test_dataset = test_dataset
         self.model = model
         self.loss = loss

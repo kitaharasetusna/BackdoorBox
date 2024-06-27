@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import DatasetFolder, CIFAR10, MNIST
 import numpy as np
 import random
+from torch.utils.data import random_split
 
 import sys
 sys.path.append('..')
@@ -196,9 +197,161 @@ avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
 )
 
 freeze_model(model_G); freeze_model(model_M) 
-print(f'ASR of IAD: {avg_acc_bd.item(): .2f}')
-del test_loader; del test_loader1 
-# -----------------------------TODO: fine-tuning it using another backdoor--------------------------------
+print(f'ASR of IAD: {avg_acc_bd.item(): .2f}, ACC: {avg_acc_clean.item()}')
+
+
+
+
+del test_loader; del test_loader1
+# ----------------------------------------- fine-tuning vs ISSBA---------------------------------------
+# ----------------------------------------- copy 2 models (test IAD BSR sep)---------------------------
+trainset = CIFAR10(
+    root='../datasets', # please replace this with path to your dataset
+    transform=transform_train,
+    target_transform=None,
+    train=True,
+    download=True)
+testset = CIFAR10(
+    root='../datasets', # please replace this with path to your dataset
+    transform=transform_test,
+    target_transform=None,
+    train=False,
+    download=True)
+subset_size = int(len(trainset) * 0.1)
+remaining_size = len(trainset) - subset_size
+ft_subset_tr, _ = random_split(trainset, [subset_size, remaining_size])
+subset_size_te = int(len(testset) * 0.1)
+remaining_size_te = len(testset) - subset_size_te 
+ft_subset_te, _ = random_split(testset, [subset_size_te, remaining_size_te])
+
+
+
+
+test_loader_ft = DataLoader(
+        ft_subset_tr,
+        batch_size=settings_['batch_size'],
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+test_loader1_ft = DataLoader(
+    ft_subset_tr,
+    batch_size=settings_['batch_size'],
+    shuffle=True,
+    num_workers=0,
+    drop_last=False,
+    worker_init_fn=_seed_worker
+)
+avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+    test_loader_ft,
+    test_loader1_ft,
+    model,
+    model_G,
+    model_M,
+    work_dir=folder_name
+)
+
+print(f' ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+del test_loader1_ft; del test_loader_ft
+# -----------------------------fine-tuning it using another backdoor--------------------------------
+
+# ---------------------------------fine tuning it on the clean dataset------------------------------
+layer=["full layers"]
+import copy
+model_clean = copy.deepcopy(model)
+finetuning=core.FineTuning(
+        train_dataset=ft_subset_tr,
+        test_dataset=ft_subset_te,
+        model=model_clean,
+        layer=layer,
+        loss=nn.CrossEntropyLoss(),
+        seed=global_seed,
+        deterministic=deterministic
+)
+schedule = {
+        'device': 'GPU',
+        'CUDA_VISIBLE_DEVICES': '0',
+        'GPU_num': 1,
+
+        'batch_size': 128,
+        'num_workers': 0,
+
+        'lr': 0.001,
+        'momentum': 0.9,
+        'weight_decay': 5e-4,
+        'gamma': 0.1,
+        'schedule': [],
+
+        'epochs': 2,
+        'log_iteration_interval': 100,
+        'save_epoch_interval': 10,
+
+        'save_dir': '../experiments',
+        'experiment_name': '../finetuning_vs_IAD'
+    }
+
+for ft_epochs in range(5):
+ 
+    finetuning.repair(schedule)
+    test_loader = DataLoader(
+        testset,
+        batch_size=settings_['batch_size'],
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    test_loader1 = DataLoader(
+        testset1,
+        batch_size=settings_['batch_size'],
+        shuffle=True,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+        test_loader,
+        test_loader1,
+        model_clean,
+        model_G,
+        model_M,
+        work_dir=folder_name
+    )
+
+    print(f'{ft_epochs} ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+
+    test_loader_ft = DataLoader(
+        ft_subset_tr,
+        batch_size=settings_['batch_size'],
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    test_loader1_ft = DataLoader(
+        ft_subset_tr,
+        batch_size=settings_['batch_size'],
+        shuffle=True,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+        test_loader_ft,
+        test_loader1_ft,
+        model_clean,
+        model_G,
+        model_M,
+        work_dir=folder_name
+    )
+
+    print(f'{ft_epochs} ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+
+
+del test_loader; del test_loader1; del test_loader1_ft; del test_loader_ft
+
+# -----------------------------TODO: change it to only parts of the training dataset----------------
 # ===== Train backdoored model on CIFAR10 using with CIFAR10 ===== 
 
 global_seed = 666
@@ -248,31 +401,20 @@ transform_test = Compose([
     ToTensor(),
 ])
 
-trainset = CIFAR10(
-    root='../datasets', # please replace this with path to your dataset
-    transform=transform_train,
-    target_transform=None,
-    train=True,
-    download=True)
-testset = CIFAR10(
-    root='../datasets', # please replace this with path to your dataset
-    transform=transform_test,
-    target_transform=None,
-    train=False,
-    download=True)
+
 
 
 secret_size = 20
 
 train_data_set = []
 train_secret_set = []
-for idx, (img, lab) in enumerate(trainset):
+for idx, (img, lab) in enumerate(ft_subset_tr):
     train_data_set.append(img.tolist())
     secret = np.random.binomial(1, .5, secret_size).tolist()
     train_secret_set.append(secret)
 
 
-for idx, (img, lab) in enumerate(testset):
+for idx, (img, lab) in enumerate(ft_subset_te):
     train_data_set.append(img.tolist())
     secret = np.random.binomial(1, .5, secret_size).tolist()
     train_secret_set.append(secret)
@@ -290,16 +432,16 @@ schedule = {
     'batch_size': 128,
     'num_workers': 0,
 
-    'lr': 0.1,
+    'lr': 0.001, # default: 0.1
     'momentum': 0.9,
     'weight_decay': 5e-4,
     'gamma': 0.1,
     'schedule': [150, 180],
 
-    'epochs': 10,
+    'epochs': 2,
 
     'log_iteration_interval': 100,
-    'test_epoch_interval': 10,
+    'test_epoch_interval': 10, #TODO: default 10
     'save_epoch_interval': 100,
     # 'pretrain': pth_path,
 
@@ -320,8 +462,8 @@ encoder_schedule = {
 # Configure the attack scheme
 ISSBA = core.ISSBA(
     dataset_name="cifar10",
-    train_dataset=trainset,
-    test_dataset=testset,
+    train_dataset=ft_subset_tr,
+    test_dataset=ft_subset_te,
     train_steg_set=train_steg_set,
     model=model,
     loss=nn.CrossEntropyLoss(),
@@ -334,36 +476,60 @@ ISSBA = core.ISSBA(
     deterministic=deterministic
 )
 print(torch.cuda.device_count())
-ISSBA.train(schedule=schedule)
 
-# ===== Train backdoored model on CIFAR10 using with CIFAR10 (done) ===== 
+for ft_epochs in range(5):
+    ISSBA.train(schedule=schedule)
+    # ===== Train backdoored model on CIFAR10 using with CIFAR10 (done) ===== 
+    test_loader = DataLoader(
+        testset,
+        batch_size=settings_['batch_size'],
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    test_loader1 = DataLoader(
+        testset1,
+        batch_size=settings_['batch_size'],
+        shuffle=True,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+        test_loader,
+        test_loader1,
+        model,
+        model_G,
+        model_M,
+        work_dir=folder_name
+    )
 
+    print(f'{ft_epochs} ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')
+    
+    test_loader_ft = DataLoader(
+        ft_subset_tr,
+        batch_size=settings_['batch_size'],
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    test_loader1_ft = DataLoader(
+        ft_subset_tr,
+        batch_size=settings_['batch_size'],
+        shuffle=True,
+        num_workers=0,
+        drop_last=False,
+        worker_init_fn=_seed_worker
+    )
+    avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
+        test_loader_ft,
+        test_loader1_ft,
+        model,
+        model_G,
+        model_M,
+        work_dir=folder_name
+    )
 
-
-test_loader = DataLoader(
-    testset,
-    batch_size=settings_['batch_size'],
-    shuffle=False,
-    num_workers=0,
-    drop_last=False,
-    worker_init_fn=_seed_worker
-)
-test_loader1 = DataLoader(
-    testset1,
-    batch_size=settings_['batch_size'],
-    shuffle=True,
-    num_workers=0,
-    drop_last=False,
-    worker_init_fn=_seed_worker
-)
-avg_acc_clean, avg_acc_bd, avg_acc_cross = IAD.test(
-    test_loader,
-    test_loader1,
-    model,
-    model_G,
-    model_M,
-    work_dir=folder_name
-)
-
-# freeze_model(model_G); freeze_model(model_M); model.train()
-print(f'ASR of IAD (after): {avg_acc_bd.item(): .2f}')
+    print(f'{ft_epochs} ISSBA | ASR of IAD (after): {avg_acc_bd.item(): .2f}, ACC {avg_acc_clean.item(): .2f}')

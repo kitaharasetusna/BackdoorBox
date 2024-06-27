@@ -814,7 +814,7 @@ class ISSBA(Base):
             assert self.encoder_schedule is not None
             self.train_encoder_decoder(train_only=False)
         self.get_img()
-        del self.train_steg_set
+        # del self.train_steg_set
 
         trainset, testset = self.train_dataset, self.test_dataset
         train_dl = DataLoader(

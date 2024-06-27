@@ -66,6 +66,7 @@ class FineTuning(Base):
         self.layer=layer
         self.loss=loss
         self.schedule=schedule
+        self.current_schedule = schedule
 
 
     def frozen(self):
@@ -88,22 +89,23 @@ class FineTuning(Base):
         print("--------fine tuning-------")
         if schedule==None:
             raise AttributeError("Schedule is None, please check your schedule setting.")
-        current_schedule =schedule
+        self.current_schedule =schedule
+        current_schedule = schedule
 
         # Use GPU
-        if 'device' in current_schedule and current_schedule['device'] == 'GPU':
-            if 'CUDA_VISIBLE_DEVICES' in current_schedule:
-                os.environ['CUDA_VISIBLE_DEVICES'] = current_schedule['CUDA_VISIBLE_DEVICES']
+        if 'device' in self.current_schedule and self.current_schedule['device'] == 'GPU':
+            if 'CUDA_VISIBLE_DEVICES' in self.current_schedule:
+                os.environ['CUDA_VISIBLE_DEVICES'] = self.current_schedule['CUDA_VISIBLE_DEVICES']
 
             assert torch.cuda.device_count() > 0, 'This machine has no cuda devices!'
-            assert current_schedule['GPU_num'] > 0, 'GPU_num should be a positive integer'
+            assert self.current_schedule['GPU_num'] > 0, 'GPU_num should be a positive integer'
             print(
-                f"This machine has {torch.cuda.device_count()} cuda devices, and use {current_schedule['GPU_num']} of them to train.")
+                f"This machine has {torch.cuda.device_count()} cuda devices, and use {self.current_schedule['GPU_num']} of them to train.")
 
-            if current_schedule['GPU_num'] == 1:
+            if self.current_schedule['GPU_num'] == 1:
                 device = torch.device("cuda:0")
             else:
-                gpus = list(range(current_schedule['GPU_num']))
+                gpus = list(range(self.current_schedule['GPU_num']))
                 self.model = nn.DataParallel(self.model.cuda(), device_ids=gpus, output_device=gpus[0])
                 # TODO: DDP training
                 pass
