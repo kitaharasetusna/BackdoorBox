@@ -1,5 +1,6 @@
 '''
 This is a motivation experiment behind our optimized-based b2b
+# TODO: 1. finish fine-tuning and ISSBA training and test
 '''
 
 import os
@@ -22,11 +23,20 @@ import sys
 sys.path.append('..')
 import core
 from core.attacks.IAD import Generator
+from core.utils import Log
 
 global_seed = 666
 deterministic = True
 torch.manual_seed(global_seed)
 
+# ------------------------------------------------ 0 --------------------------------------------------
+# configs
+y_target_IAD = 1; y_target_ISSBA = 2
+folder_path = '../experiments/exp1_IAD_vs_ISSBA/'
+log = Log(log_path=folder_path+f'{time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())}.txt')
+os.makedirs(folder_path, exist_ok=True)
+
+train_IAD = False 
 # ------------------------------------------------ 1 --------------------------------------------------
 # prepare secure dataset, training dataset and test dataset
 
@@ -265,6 +275,9 @@ def train_step(
         return avg_loss, acc_clean, acc_bd, acc_cross
 
 def train_benign_backdoor(ds_secure_tr, ds_secure_te, y_target):
+    '''
+        args: model, modelM, modelG
+    '''
     model = core.models.ResNet(18)
     loss=nn.CrossEntropyLoss()
     device = torch.device("cuda:0")
@@ -332,7 +345,7 @@ def train_benign_backdoor(ds_secure_tr, ds_secure_te, y_target):
             total_loss, loss_norm, loss_div = train_mask_step(modelM, optimizerM, schedulerM, loader_tr, loader_tr1, device=device,
                                              EPSILON=EPSILON, lambda_div=lambda_div, mask_density=mask_density,lambda_norm=lambda_norm)
             msg = f"epoch: {i+1} "+time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + "Train Mask loss: {:.4f} | Norm: {:.3f} | Diversity: {:.3f}\n".format(total_loss, loss_norm, loss_div)
-            print(msg)
+            log(msg)
             # TODO: add test  
     modelM.eval()
     modelM.requires_grad_(False)
@@ -349,8 +362,110 @@ def train_benign_backdoor(ds_secure_tr, ds_secure_te, y_target):
         msg = f"EPOCH: {i+1}: "+ time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) +\
             "Train CE loss: {:.4f} | BA: {:.3f} | ASR: {:.3f} | Cross Accuracy: {:3f}\n".format(
             avg_loss, acc_clean, acc_bd, acc_cross)
-        print(msg)
-    return model
+        log(msg)
+    modelG.eval(); modelG.requires_grad_(False)
+    return model, modelM, modelG
 
-train_benign_backdoor(ds_secure_tr=ds_secure_tr, ds_secure_te=ds_secure_te, y_target=1)
+def save_IAD_model(model, modelM, modelG, save_folder):
+    print(" Saving IAD model ... ")
+    state_dict = {
+        "model": model.state_dict(),
+        "modelG": modelG.state_dict(),
+        "modelM": modelM.state_dict(),
+    }
+    ckpt_model_filename = "IAD_ckpt_" +f'_{time.strftime("%Y-%m-%d_%H:%M:%S")}' + ".pth"
+    ckpt_model_path = os.path.join(save_folder, ckpt_model_filename)
+    torch.save(state_dict, ckpt_model_path)
+
+if train_IAD== True: 
+    log('Train IAD from scratch')
+    model, modelM, modelG = train_benign_backdoor(ds_secure_tr=ds_secure_tr, ds_secure_te=ds_secure_te, y_target=y_target_IAD)
+    save_IAD_model(model, modelM=modelM, modelG=modelG, save_folder=folder_path)
+else:
+    log('Load IAD'); dataset_name = 'cifar10'; device = torch.device("cuda:0")
+    model = core.models.ResNet(18).to(device); modelG = Generator(dataset_name).to(device);modelM = Generator(dataset_name, out_channels=1).to(device) 
+    folder_name = '../experiments/exp1_IAD_vs_ISSBA'; pth_path = folder_name+'/'+'IAD_ckpt__2024-06-30_16:46:02.pth'
+    state_dict = torch.load(pth_path); state_dict_keys = state_dict.keys(); keys_ = [key for key in state_dict_keys]
+    model.load_state_dict(state_dict[keys_[0]]); modelG.load_state_dict(state_dict[keys_[1]]);modelM.load_state_dict(state_dict[keys_[2]])
+
+def test_IAD(ds_te, ds_te1, model, modelG, modelM, verbose=False):
+    '''test backdoor accuracy, save backdoored images
+        args:
+            verbose: if True then save imgs
+    '''
+    asr = 0; acc = 0
+    device = torch.device("cuda:0")
+    model.eval()
+    modelG.eval(); modelM.eval()
+    total_correct_clean = 0.0; total_correct_bd = 0.0; total_correct_cross = 0.0; total = 0.0
+    test_poisoned_data, test_poisoned_label = [], [] 
+
+    bs_te = 128
+    loader_te = DataLoader(
+        dataset=ds_te,
+        batch_size=bs_te,
+        shuffle=False,
+        num_workers=0,
+        drop_last=False,
+    )
+    loader_te1 = DataLoader(
+        dataset=ds_te1,
+        batch_size=bs_te,
+        shuffle=True,
+        num_workers=0,
+        drop_last=False,
+    )
+    
+    
+    for batch_idx, (inputs1, targets1), (inputs2, targets2) in zip(range(len(loader_te)), loader_te, loader_te1):
+        with torch.no_grad():
+            inputs1, targets1 = inputs1.to(device), targets1.to(device)
+            inputs2, targets2 = inputs2.to(device), targets2.to(device)
+            bs = inputs1.shape[0]
+
+            # Construct the benign samples and calculate the clean accuracy
+            preds_clean = model(inputs1)
+            correct_clean = torch.sum(torch.argmax(preds_clean, 1) == targets1)
+            total_correct_clean += correct_clean
+
+            # Construct the backdoored samples and calculate the backdoored accuracy
+            inputs_bd, targets_bd, _, _ = create_bd(inputs1, targets1, modelG, modelM, y_target=y_target_IAD, device=device)
+
+            test_poisoned_data += inputs_bd.detach().cpu().numpy().tolist()
+            test_poisoned_label += targets_bd.detach().cpu().numpy().tolist()
+
+            preds_bd = model(inputs_bd)
+            correct_bd = torch.sum(torch.argmax(preds_bd, 1) == targets_bd)
+            total_correct_bd += correct_bd
+
+            # Construct the cross samples and calculate the diversity accuracy
+            inputs_cross, _, _ = create_cross(inputs1, inputs2, modelG, modelM)
+            preds_cross = model(inputs_cross)
+            correct_cross = torch.sum(torch.argmax(preds_cross, 1) == targets1)
+            total_correct_cross += correct_cross
+
+            total += bs
+            avg_acc_clean = total_correct_clean * 100.0 / total
+            avg_acc_cross = total_correct_cross * 100.0 / total
+            avg_acc_bd = total_correct_bd * 100.0 / total
+        
+    return avg_acc_clean, avg_acc_bd, avg_acc_cross
+
+def log_test (avg_acc_clean, avg_acc_bd, avg_acc_cross):
+    msg = "==========Test result on benign test dataset==========\n" + \
+                        time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
+                        f"Accuracy: {avg_acc_clean}\n"
+    log(msg)
+    msg = "==========Test result on poisoned test dataset==========\n" + \
+            time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
+            f"Accuracy: {avg_acc_bd}"
+    log(msg)
+    msg = "==========Test result on cross test dataset==========\n" + \
+            time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
+            f"Accuracy: {avg_acc_cross}"
+    log(msg)
+
+avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 
+                                                    model=model, modelG=modelG, modelM=modelM, verbose=True)
+log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
 
