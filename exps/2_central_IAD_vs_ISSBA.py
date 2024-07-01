@@ -18,16 +18,39 @@ import numpy as np
 import random
 import time
 from torch.utils.data import random_split
+import matplotlib.pyplot as plt
+import copy
+import lpips
 
 import sys
 sys.path.append('..')
 import core
 from core.attacks.IAD import Generator
+from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminator
 from core.utils import Log
 
 global_seed = 666
 deterministic = True
 torch.manual_seed(global_seed)
+
+class GetPoisonedDataset(torch.utils.data.Dataset):
+    """Construct a dataset.
+
+    Args:
+        data_list (list): the list of data.
+        labels (list): the list of label.
+    """
+    def __init__(self, data_list, labels):
+        self.data_list = data_list
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, index):
+        img = torch.FloatTensor(self.data_list[index])
+        label = torch.FloatTensor(self.labels[index])
+        return img, label
 
 # ------------------------------------------------ 0 --------------------------------------------------
 # configs
@@ -35,7 +58,7 @@ y_target_IAD = 1; y_target_ISSBA = 2
 folder_path = '../experiments/exp1_IAD_vs_ISSBA/'
 log = Log(log_path=folder_path+f'{time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())}.txt')
 os.makedirs(folder_path, exist_ok=True)
-
+device = torch.device("cuda:0")
 train_IAD = False 
 # ------------------------------------------------ 1 --------------------------------------------------
 # prepare secure dataset, training dataset and test dataset
@@ -43,7 +66,7 @@ train_IAD = False
 def prepare_datasets():
     ''' collect randomly 10% data as secure data
         return:
-            ds_tr, ds_te, ds_secure_tr, ds_secure_te 
+            ds_tr, ds_te, ds_secure_tr, ds_secure_te, ds_bd_tr, ds_bd_te 
     '''
     transform_train = Compose([
         transforms.Resize((32, 32)),
@@ -75,13 +98,13 @@ def prepare_datasets():
         download=True)
 
     subset_size_tr = int(len(trainset) * 0.1); remaining_size_tr = len(trainset) - subset_size_tr
-    subset_tr, _ = random_split(trainset, [subset_size_tr, remaining_size_tr])
+    subset_tr, ds_bd_tr = random_split(trainset, [subset_size_tr, remaining_size_tr])
     subset_size_te = int(len(testset) * 0.1); remaining_size_te = len(testset) - subset_size_te 
-    subset_te, _ = random_split(testset, [subset_size_te, remaining_size_te])
+    subset_te, ds_bd_te = random_split(testset, [subset_size_te, remaining_size_te])
 
-    return trainset, testset, subset_tr, subset_te
+    return trainset, testset, subset_tr, subset_te, ds_bd_tr, ds_bd_te
 
-ds_tr, ds_te, ds_secure_tr, ds_secure_te = prepare_datasets()
+ds_tr, ds_te, ds_secure_tr, ds_secure_te, ds_bd_tr, ds_bd_te = prepare_datasets()
 # print(len(ds_tr), len(ds_te), len(ds_secure_tr), len(ds_secure_te)); 50000 10000 5000 1000
 
 # ------------------------------------------------ 2 --------------------------------------------------# 
@@ -448,24 +471,155 @@ def test_IAD(ds_te, ds_te1, model, modelG, modelM, verbose=False):
             avg_acc_clean = total_correct_clean * 100.0 / total
             avg_acc_cross = total_correct_cross * 100.0 / total
             avg_acc_bd = total_correct_bd * 100.0 / total
-        
+    index  = 200 
+    for index in [100, 200, 300, 400, 500, 600]:
+        with torch.no_grad(): 
+            image_, _ = ds_te[index]; image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
+            image_ = modelG.denormalize_pattern(image_); image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(folder_name+f'/ori_{index}.pdf')
+            patterns = modelG(image); patterns = modelG.normalize_pattern(patterns); masks_output = modelM.threshold(modelM(image))
+            bd_inputs = image + (patterns - image) * masks_output; bd_inputs = modelG.denormalize_pattern(bd_inputs)
+            bd_inputs = bd_inputs.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+            plt.imshow(bd_inputs)
+            plt.savefig(folder_name+f'/IAD_{index}.pdf')
     return avg_acc_clean, avg_acc_bd, avg_acc_cross
 
 def log_test (avg_acc_clean, avg_acc_bd, avg_acc_cross):
     msg = "==========Test result on benign test dataset==========\n" + \
                         time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
-                        f"Accuracy: {avg_acc_clean}\n"
+                        f"Accuracy: {avg_acc_clean: .2f}"
     log(msg)
     msg = "==========Test result on poisoned test dataset==========\n" + \
             time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
-            f"Accuracy: {avg_acc_bd}"
+            f"Accuracy: {avg_acc_bd: .2f}"
     log(msg)
     msg = "==========Test result on cross test dataset==========\n" + \
             time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + \
-            f"Accuracy: {avg_acc_cross}"
+            f"Accuracy: {avg_acc_cross: .2f}"
     log(msg)
 
 avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 
                                                     model=model, modelG=modelG, modelM=modelM, verbose=True)
 log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
 
+
+# ------------------------------------------------ 3 --------------------------------------------------# 
+# copy model to 2 parts; fine tune on ISSBA frist
+model_clean = copy.deepcopy(model); model_mali = copy.deepcopy(model)
+
+# TODO: tips when comparing with BATT, use high ratio
+
+def reset_grad(optimizer, d_optimizer):
+    optimizer.zero_grad()
+    d_optimizer.zero_grad()
+
+def get_secret_acc(secret_true, secret_pred):
+    """The accurate for the steganography secret.
+
+    Args:
+        secret_true (torch.Tensor): Label of the steganography secret.
+        secret_pred (torch.Tensor): Prediction of the steganography secret.
+    """
+    secret_pred = torch.round(torch.sigmoid(secret_pred))
+    correct_pred = (secret_pred.shape[0] * secret_pred.shape[1]) - torch.count_nonzero(secret_pred - secret_true)
+    bit_acc = torch.sum(correct_pred) / (secret_pred.shape[0] * secret_pred.shape[1])
+
+    return bit_acc
+
+def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20):
+    '''
+        return: 
+            model_mali, encoder, decoder
+    '''
+    print(len(ds_bd_tr), len(ds_bd_te))
+
+    train_data_set = []
+    train_secret_set = []
+    for idx, (img, lab) in enumerate(ds_bd_tr):
+        train_data_set.append(img.tolist())
+        secret = np.random.binomial(1, .5, secret_size).tolist()
+        train_secret_set.append(secret)
+    # for idx, (img, lab) in enumerate(ds_bd_te):
+    #     train_data_set.append(img.tolist())
+    #     secret = np.random.binomial(1, .5, secret_size).tolist()
+    #     train_secret_set.append(secret)
+    # TODO: remove this bd_te part maybe
+    train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
+
+    total_num = len(ds_bd_tr); poisoned_num = int(total_num * poison_ratio)
+    tmp_list = list(range(total_num)); random.shuffle(tmp_list)
+    poisoned_set = frozenset(tmp_list[:poisoned_num]) 
+    print(len(poisoned_set))
+
+    encoder = StegaStampEncoder(
+        secret_size=secret_size, 
+        height=32, 
+        width=32,
+        in_channel=3).to(device)
+    decoder = StegaStampDecoder(
+        secret_size=secret_size, 
+        height=32, 
+        width=32,
+        in_channel=3).to(device)
+    discriminator = Discriminator(in_channel=3).to(device)
+
+    train_dl = DataLoader(
+            train_steg_set,
+            batch_size=32,
+            shuffle=True,
+            )
+    
+    enc_total_epoch = 5 # defualt 20 
+    enc_secret_only_epoch = 2 
+    optimizer = torch.optim.Adam([{'params': encoder.parameters()}, {'params': decoder.parameters()}], lr=0.0001)
+    d_optimizer = torch.optim.RMSprop(discriminator.parameters(), lr=0.00001)
+    loss_fn_alex = lpips.LPIPS(net='alex').cuda()
+    for epoch in range(enc_total_epoch):
+        loss_list, bit_acc_list = [], []
+        for idx, (image_input, secret_input) in enumerate(train_dl):
+            image_input, secret_input = image_input.to(device), secret_input.to(device)
+
+            residual = encoder([secret_input, image_input])
+            encoded_image = image_input + residual
+            encoded_image = encoded_image.clamp(0, 1)
+            decoded_secret = decoder(encoded_image)
+            D_output_fake = discriminator(encoded_image)
+
+            # cross entropy loss for the steganography secret
+            secret_loss_op = F.binary_cross_entropy_with_logits(decoded_secret, secret_input, reduction='mean')
+            
+           
+            lpips_loss_op = loss_fn_alex(image_input,encoded_image)
+            # L2 residual regularization loss
+            l2_loss = torch.square(residual).mean()
+            # the critic loss calculated between the encoded image and the original image
+            G_loss = D_output_fake
+
+            if epoch < enc_secret_only_epoch:
+                total_loss = secret_loss_op
+            else:
+                total_loss = 2.0 * l2_loss + 1.5 * lpips_loss_op.mean() + 1.5 * secret_loss_op + 0.5 * G_loss
+            loss_list.append(total_loss.item())
+
+            bit_acc = get_secret_acc(secret_input, decoded_secret)
+            bit_acc_list.append(bit_acc.item())
+
+            total_loss.backward()
+            optimizer.step()
+            reset_grad(optimizer, d_optimizer)
+        msg = f'Epoch [{epoch + 1}] total loss: {np.mean(loss_list)}, bit acc: {np.mean(bit_acc_list)}\n'
+        log(msg)
+
+    savepath = os.path.join(folder_name, 'encoder_decoder.pth')
+    state = {
+        'encoder_state_dict': encoder.state_dict(),
+        'decoder_state_dict': decoder.state_dict(),
+    }
+    torch.save(state, savepath)
+
+    
+    
+
+
+    return model_mali, encoder, decoder
+
+train_ISSBA(ds_bd_tr=ds_bd_tr, ds_bd_te=ds_bd_te, model_mali=model_mali)
