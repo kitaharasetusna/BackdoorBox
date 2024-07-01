@@ -404,6 +404,7 @@ if train_IAD== True:
     log('Train IAD from scratch')
     model, modelM, modelG = train_benign_backdoor(ds_secure_tr=ds_secure_tr, ds_secure_te=ds_secure_te, y_target=y_target_IAD)
     save_IAD_model(model, modelM=modelM, modelG=modelG, save_folder=folder_path)
+    modelM.eval(); modelM.requires_grad_(False); modelG.eval(); modelG.requires_grad_(False)
 else:
     log('Load IAD'); dataset_name = 'cifar10'; device = torch.device("cuda:0")
     model = core.models.ResNet(18).to(device); modelG = Generator(dataset_name).to(device);modelM = Generator(dataset_name, out_channels=1).to(device) 
@@ -471,16 +472,16 @@ def test_IAD(ds_te, ds_te1, model, modelG, modelM, verbose=False):
             avg_acc_clean = total_correct_clean * 100.0 / total
             avg_acc_cross = total_correct_cross * 100.0 / total
             avg_acc_bd = total_correct_bd * 100.0 / total
-    index  = 200 
-    for index in [100, 200, 300, 400, 500, 600]:
-        with torch.no_grad(): 
-            image_, _ = ds_te[index]; image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
-            image_ = modelG.denormalize_pattern(image_); image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(folder_name+f'/ori_{index}.pdf')
-            patterns = modelG(image); patterns = modelG.normalize_pattern(patterns); masks_output = modelM.threshold(modelM(image))
-            bd_inputs = image + (patterns - image) * masks_output; bd_inputs = modelG.denormalize_pattern(bd_inputs)
-            bd_inputs = bd_inputs.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
-            plt.imshow(bd_inputs)
-            plt.savefig(folder_name+f'/IAD_{index}.pdf')
+    if verbose:
+        for index in [100, 200, 300, 400, 500, 600]:
+            with torch.no_grad(): 
+                image_, _ = ds_te[index]; image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
+                image_ = modelG.denormalize_pattern(image_); image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(folder_name+f'/ori_{index}.pdf')
+                patterns = modelG(image); patterns = modelG.normalize_pattern(patterns); masks_output = modelM.threshold(modelM(image))
+                bd_inputs = image + (patterns - image) * masks_output; bd_inputs = modelG.denormalize_pattern(bd_inputs)
+                bd_inputs = bd_inputs.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                plt.imshow(bd_inputs)
+                plt.savefig(folder_name+f'/IAD_{index}.pdf')
     return avg_acc_clean, avg_acc_bd, avg_acc_cross
 
 def log_test (avg_acc_clean, avg_acc_bd, avg_acc_cross):
@@ -498,7 +499,7 @@ def log_test (avg_acc_clean, avg_acc_bd, avg_acc_cross):
     log(msg)
 
 avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 
-                                                    model=model, modelG=modelG, modelM=modelM, verbose=True)
+                                                    model=model, modelG=modelG, modelM=modelM, verbose=False)
 log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
 
 
@@ -525,25 +526,26 @@ def get_secret_acc(secret_true, secret_pred):
 
     return bit_acc
 
-def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20):
+def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20, modelG=None, modelM=None, verbose=True):
     '''
         return: 
             model_mali, encoder, decoder
     '''
     print(len(ds_bd_tr), len(ds_bd_te))
 
-    train_data_set = []
-    train_secret_set = []
+    train_data_set = []; train_secret_set = []
+    test_data_set = []; test_secret_set = []
     for idx, (img, lab) in enumerate(ds_bd_tr):
         train_data_set.append(img.tolist())
         secret = np.random.binomial(1, .5, secret_size).tolist()
         train_secret_set.append(secret)
-    # for idx, (img, lab) in enumerate(ds_bd_te):
-    #     train_data_set.append(img.tolist())
-    #     secret = np.random.binomial(1, .5, secret_size).tolist()
-    #     train_secret_set.append(secret)
+    for idx, (img, lab) in enumerate(ds_bd_te):
+        test_data_set.append(img.tolist())
+        secret = np.random.binomial(1, .5, secret_size).tolist()
+        test_secret_set.append(secret)
     # TODO: remove this bd_te part maybe
     train_steg_set = GetPoisonedDataset(train_data_set, train_secret_set)
+    test_steg_set= GetPoisonedDataset(test_data_set, test_secret_set)
 
     total_num = len(ds_bd_tr); poisoned_num = int(total_num * poison_ratio)
     tmp_list = list(range(total_num)); random.shuffle(tmp_list)
@@ -608,6 +610,30 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
             reset_grad(optimizer, d_optimizer)
         msg = f'Epoch [{epoch + 1}] total loss: {np.mean(loss_list)}, bit acc: {np.mean(bit_acc_list)}\n'
         log(msg)
+    
+    encoder.eval(); decoder.eval(); 
+    encoder.requires_grad_(False)
+    decoder.requires_grad_(False)
+    
+    if verbose==True: 
+        for index in [100, 200, 300, 400, 500, 600]:
+            with torch.no_grad(): 
+                image_, secret = test_steg_set[index];secret = secret.to(device); image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
+                image_ = modelG.denormalize_pattern(image_); image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(folder_name+f'/ori_{index}.pdf')
+                patterns = modelG(image); patterns = modelG.normalize_pattern(patterns); masks_output = modelM.threshold(modelM(image))
+                bd_inputs = image + (patterns - image) * masks_output; bd_inputs = modelG.denormalize_pattern(bd_inputs)
+                bd_inputs = bd_inputs.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                plt.imshow(bd_inputs)
+                plt.savefig(folder_name+f'/IAD_{index}.pdf')
+
+                residual = encoder([secret, image])
+                encoded_image = image+ residual
+                encoded_image = modelG.denormalize_pattern(encoded_image)
+                issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                
+                plt.imshow(issba_image)
+                plt.savefig(folder_name+f'/ISSBA_{index}.pdf')
+                
 
     savepath = os.path.join(folder_name, 'encoder_decoder.pth')
     state = {
@@ -615,11 +641,9 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
         'decoder_state_dict': decoder.state_dict(),
     }
     torch.save(state, savepath)
-
     
-    
-
 
     return model_mali, encoder, decoder
 
-train_ISSBA(ds_bd_tr=ds_bd_tr, ds_bd_te=ds_bd_te, model_mali=model_mali)
+model_mali, encoder, decoder = train_ISSBA(ds_bd_tr=ds_bd_tr, ds_bd_te=ds_bd_te, 
+                                           model_mali=model_mali, modelG=modelG, modelM=modelM)
