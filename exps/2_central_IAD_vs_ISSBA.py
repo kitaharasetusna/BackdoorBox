@@ -51,6 +51,25 @@ class GetPoisonedDataset(torch.utils.data.Dataset):
         img = torch.FloatTensor(self.data_list[index])
         label = torch.FloatTensor(self.labels[index])
         return img, label
+    
+class GetPoisonedDatasetInt(torch.utils.data.Dataset):
+    """Construct a dataset.
+
+    Args:
+        data_list (list): the list of data.
+        labels (list): the list of label.
+    """
+    def __init__(self, data_list, labels):
+        self.data_list = data_list
+        self.labels = labels
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, index):
+        img = torch.FloatTensor(self.data_list[index])
+        label = torch.tensor(self.labels[index], dtype=torch.int64)
+        return img, label
 
 # ------------------------------------------------ 0 --------------------------------------------------
 # configs
@@ -526,12 +545,76 @@ def get_secret_acc(secret_true, secret_pred):
 
     return bit_acc
 
-def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20, modelG=None, modelM=None, verbose=True):
+def get_ISSBA_data(trainset, testset, poisoned_set, secret_size, bs_tr=128, poisoned_rate=0.1, encoder=None, y_target=None):
+    train_dl = DataLoader(
+            trainset,
+            batch_size=1,
+            shuffle=False,
+            num_workers=0)
+    
+    secret = torch.FloatTensor(np.random.binomial(1, .5, secret_size).tolist()).to(device)
+    cln_train_dataset, cln_train_labset, bd_train_dataset, bd_train_labset = [], [], [], []
+    for idx, (img, lab) in enumerate(train_dl):
+        assert img.shape == (1, 3, 32, 32), f"Image shape mismatch at batch {idx}: {img.shape} != (3, 32, 32)"
+        assert lab.shape == (1,), f"Target shape mismatch at batch {idx}: {lab.shape} != (1,)"
+        if idx in poisoned_set:
+            img = img.to(device)
+            residual = encoder([secret, img])
+            encoded_image = img + residual
+            encoded_image = encoded_image.clamp(0, 1)
+            # print(encoded_image.shape); import sys; sys.exit()
+            bd_train_dataset.append(encoded_image.cpu().detach().tolist()[0])
+            bd_train_labset.append(y_target)
+        else:
+            cln_train_dataset.append(img.tolist()[0])
+            cln_train_labset.append(lab.tolist()[0])
+            assert isinstance(lab.tolist()[0], int), f"Target type mismatch  {lab.tolist()[0]} != int"
+
+    assert len(cln_train_dataset)==len(cln_train_labset), f"{len(cln_train_dataset)}!={len(cln_train_labset)}"
+
+    cln_train_dl = GetPoisonedDatasetInt(cln_train_dataset, cln_train_labset)
+    bd_train_dl = GetPoisonedDatasetInt(bd_train_dataset, bd_train_labset)
+    
+    cln_train_dl = DataLoader(
+        cln_train_dl,
+        batch_size=cln_bs,
+        shuffle=True,
+        num_workers=0)
+    
+    bd_train_dl = DataLoader(
+        bd_train_dl,
+        batch_size=bd_bs,
+        shuffle=True,
+        num_workers=0) 
+    
+    first_batch = next(iter(bd_train_dl))
+    images, labels = first_batch
+
+    # Print the shapes of the images and labels
+    print(f"Images shape: {images.shape}")
+    print(f"Labels shape: {labels.shape}")
+
+    # Optionally, check the type and dtype of labels
+    print(f"Labels type: {type(labels)}")
+    print(f"Labels dtype: {labels.dtype}")
+    
+
+    return cln_train_dl
+
+def train_model_ISSBA(model, trainset, testset, poisoned_set, epoch, secret_size, poisoned_rate, encoder, y_target):
+    cln_train_dl = get_ISSBA_data(trainset=trainset, testset=testset, poisoned_set=poisoned_set,
+                                  secret_size=secret_size, poisoned_rate=poisoned_rate, encoder=encoder, y_target=y_target)
+    return model
+
+def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20, modelG=None,
+                modelM=None, verbose=True, y_target=0, bs_tr = 128, lr=0.001, epoch_ = 5, enc_total_epoch = 5):
     '''
         return: 
             model_mali, encoder, decoder
     '''
     print(len(ds_bd_tr), len(ds_bd_te))
+    
+    # train encoder - decoder
 
     train_data_set = []; train_secret_set = []
     test_data_set = []; test_secret_set = []
@@ -570,7 +653,7 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
             shuffle=True,
             )
     
-    enc_total_epoch = 5 # defualt 20 
+     # defualt 20 
     enc_secret_only_epoch = 2 
     optimizer = torch.optim.Adam([{'params': encoder.parameters()}, {'params': decoder.parameters()}], lr=0.0001)
     d_optimizer = torch.optim.RMSprop(discriminator.parameters(), lr=0.00001)
@@ -579,7 +662,7 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
         loss_list, bit_acc_list = [], []
         for idx, (image_input, secret_input) in enumerate(train_dl):
             image_input, secret_input = image_input.to(device), secret_input.to(device)
-
+            # print(secret_input.shape, image_input.shape)
             residual = encoder([secret_input, image_input])
             encoded_image = image_input + residual
             encoded_image = encoded_image.clamp(0, 1)
@@ -628,7 +711,7 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
 
                 residual = encoder([secret, image])
                 encoded_image = image+ residual
-                encoded_image = modelG.denormalize_pattern(encoded_image)
+                encoded_image = modelG.denormalize_pattern(encoded_image).clamp(0, 1)
                 issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
                 
                 plt.imshow(issba_image)
@@ -642,8 +725,19 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
     }
     torch.save(state, savepath)
     
-
+    # ------------------------------------- fin e-d training; training models now ----------------------------------------
+    train_model_ISSBA(model=model_mali, trainset=ds_bd_tr , testset=ds_bd_te, poisoned_set=poisoned_set,
+                      epoch=epoch_, secret_size=secret_size, poisoned_rate=poison_ratio, encoder=encoder, y_target=y_target)
+        
+    
     return model_mali, encoder, decoder
 
+# TODO: change this back to 5 (enc_total_epoch)
 model_mali, encoder, decoder = train_ISSBA(ds_bd_tr=ds_bd_tr, ds_bd_te=ds_bd_te, 
-                                           model_mali=model_mali, modelG=modelG, modelM=modelM)
+                                           model_mali=model_mali, modelG=modelG, modelM=modelM, y_target=y_target_ISSBA,
+                                           enc_total_epoch=1)
+
+torch.save(model_mali.state_dict(), folder_name+'/model_mali.pth')
+avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 
+                                                    model=model_mali, modelG=modelG, modelM=modelM, verbose=False)
+log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
