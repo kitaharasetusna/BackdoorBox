@@ -575,6 +575,8 @@ def get_ISSBA_data(trainset, testset, poisoned_set, secret_size, bs_tr=128, pois
     cln_train_dl = GetPoisonedDatasetInt(cln_train_dataset, cln_train_labset)
     bd_train_dl = GetPoisonedDatasetInt(bd_train_dataset, bd_train_labset)
     
+    bd_bs = int(bs_tr * poisoned_rate)
+    cln_bs = int(bs_tr- bd_bs) 
     cln_train_dl = DataLoader(
         cln_train_dl,
         batch_size=cln_bs,
