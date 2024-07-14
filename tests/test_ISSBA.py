@@ -240,7 +240,7 @@ encoder_schedule = {
     'enc_height': 32,
     'enc_width': 32,
     'enc_in_channel': 3,
-    'enc_total_epoch': 5, # default 20
+    'enc_total_epoch': 2, # default 20
     'enc_secret_only_epoch': 2,
     'enc_use_dis': False,
 }

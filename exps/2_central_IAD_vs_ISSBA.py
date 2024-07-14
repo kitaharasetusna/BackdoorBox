@@ -75,10 +75,11 @@ class GetPoisonedDatasetInt(torch.utils.data.Dataset):
 # configs
 y_target_IAD = 1; y_target_ISSBA = 2
 folder_path = '../experiments/exp1_IAD_vs_ISSBA/'
+folder_name = '../experiments/exp1_IAD_vs_ISSBA/'
 log = Log(log_path=folder_path+f'{time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())}.txt')
 os.makedirs(folder_path, exist_ok=True)
 device = torch.device("cuda:0")
-train_IAD = False 
+train_IAD = False; add_lplis = False; add_norm_loss = False; train_mask = True 
 # ------------------------------------------------ 1 --------------------------------------------------
 # prepare secure dataset, training dataset and test dataset
 
@@ -188,13 +189,18 @@ def create_bd(
         inputs, targets, modelG, modelM,
         y_target, device
     ):
-        create_targets_bd = ModifyTarget(y_target)
-        bd_targets = create_targets_bd(targets).to(device)
-        patterns = modelG(inputs)
-        patterns = modelG.normalize_pattern(patterns)
-        masks_output = modelM.threshold(modelM(inputs))
-        bd_inputs = inputs + (patterns - inputs) * masks_output
-        return bd_inputs, bd_targets, patterns, masks_output
+    '''
+        returns:
+            bd_inputs: encoded image; bd_tagets; pattersn (G); mask_output; residual; 
+    '''
+    create_targets_bd = ModifyTarget(y_target)
+    bd_targets = create_targets_bd(targets).to(device)
+    patterns = modelG(inputs)
+    patterns = modelG.normalize_pattern(patterns)
+    masks_output = modelM.threshold(modelM(inputs))
+    residual = (patterns - inputs) * masks_output
+    bd_inputs = inputs + residual 
+    return bd_inputs, bd_targets, patterns, masks_output, residual
 
 def create_cross(
         inputs1, 
@@ -239,6 +245,8 @@ def train_step(
         total_loss = 0
         criterion = nn.CrossEntropyLoss() 
         criterion_div = nn.MSELoss(reduction="none")
+        if add_lplis:
+            loss_fn_alex = lpips.LPIPS(net='alex').cuda()
         train_poisoned_data, train_poisoned_label = [], []
         for batch_idx, (inputs1, targets1), (inputs2, targets2) in zip(range(len(train_dl1)), train_dl1, train_dl2):
             optimizerC.zero_grad()
@@ -251,12 +259,20 @@ def train_step(
             num_bd = int(poisoned_rate * bs)
             num_cross = int(cross_rate * bs)
 
-            inputs_bd, targets_bd, patterns1, masks1 = create_bd(inputs1[:num_bd], targets1[:num_bd], modelG, modelM, y_target=y_target,device=device)
+            inputs_bd, targets_bd, patterns1, masks1, residual = create_bd(inputs1[:num_bd], targets1[:num_bd], modelG, modelM, y_target=y_target,device=device)
             inputs_cross, patterns2, masks2 = create_cross(
                 inputs1[num_bd : num_bd + num_cross], inputs2[num_bd : num_bd + num_cross], modelG, modelM
             )
 
+            # TODO:  lpips loss if
+            if add_lplis:
+                lpips_loss_op = loss_fn_alex(inputs1[:num_bd], inputs_bd).mean()
+            if add_norm_loss:
+                l2_loss = torch.square(residual).mean()
+
             total_inputs = torch.cat((inputs_bd, inputs_cross, inputs1[num_bd + num_cross :]), 0)
+            
+            
             total_targets = torch.cat((targets_bd, targets1[num_bd:]), 0)
 
             train_poisoned_data += total_inputs.detach().cpu().numpy().tolist()
@@ -280,6 +296,11 @@ def train_step(
 
             # Total loss
             total_loss = loss_ce + loss_div
+            if  add_lplis:
+                total_loss += lpips_loss_op
+            if add_norm_loss:
+                total_loss += l2_loss
+            
             total_loss.backward()
             optimizerC.step()
             optimizerG.step()
@@ -379,16 +400,16 @@ def train_benign_backdoor(ds_secure_tr, ds_secure_te, y_target):
     optimizerM = torch.optim.Adam(modelM.parameters(), lr=0.01, betas=(0.5, 0.9))
     schedulerM = torch.optim.lr_scheduler.MultiStepLR(optimizerM, [10, 20], 0.1)
 
-    
-    epoch = 1
-    if epoch == 1:
-        modelM.train()
-        for i in range(epoch_M): 
-            total_loss, loss_norm, loss_div = train_mask_step(modelM, optimizerM, schedulerM, loader_tr, loader_tr1, device=device,
-                                             EPSILON=EPSILON, lambda_div=lambda_div, mask_density=mask_density,lambda_norm=lambda_norm)
-            msg = f"epoch: {i+1} "+time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + "Train Mask loss: {:.4f} | Norm: {:.3f} | Diversity: {:.3f}\n".format(total_loss, loss_norm, loss_div)
-            log(msg)
-            # TODO: add test  
+    if train_mask: 
+        epoch = 1
+        if epoch == 1:
+            modelM.train()
+            for i in range(epoch_M): 
+                total_loss, loss_norm, loss_div = train_mask_step(modelM, optimizerM, schedulerM, loader_tr, loader_tr1, device=device,
+                                                EPSILON=EPSILON, lambda_div=lambda_div, mask_density=mask_density,lambda_norm=lambda_norm)
+                msg = f"epoch: {i+1} "+time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + "Train Mask loss: {:.4f} | Norm: {:.3f} | Diversity: {:.3f}\n".format(total_loss, loss_norm, loss_div)
+                log(msg)
+                # TODO: add test  
     modelM.eval()
     modelM.requires_grad_(False)
 
@@ -427,7 +448,7 @@ if train_IAD== True:
 else:
     log('Load IAD'); dataset_name = 'cifar10'; device = torch.device("cuda:0")
     model = core.models.ResNet(18).to(device); modelG = Generator(dataset_name).to(device);modelM = Generator(dataset_name, out_channels=1).to(device) 
-    folder_name = '../experiments/exp1_IAD_vs_ISSBA'; pth_path = folder_name+'/'+'IAD_ckpt__2024-06-30_16:46:02.pth'
+    folder_name = '../experiments/exp1_IAD_vs_ISSBA'; pth_path = folder_name+'/'+'IAD_ckpt__2024-07-03_21:05:00.pth'
     state_dict = torch.load(pth_path); state_dict_keys = state_dict.keys(); keys_ = [key for key in state_dict_keys]
     model.load_state_dict(state_dict[keys_[0]]); modelG.load_state_dict(state_dict[keys_[1]]);modelM.load_state_dict(state_dict[keys_[2]])
 
@@ -472,7 +493,7 @@ def test_IAD(ds_te, ds_te1, model, modelG, modelM, verbose=False):
             total_correct_clean += correct_clean
 
             # Construct the backdoored samples and calculate the backdoored accuracy
-            inputs_bd, targets_bd, _, _ = create_bd(inputs1, targets1, modelG, modelM, y_target=y_target_IAD, device=device)
+            inputs_bd, targets_bd, _, _,_ = create_bd(inputs1, targets1, modelG, modelM, y_target=y_target_IAD, device=device)
 
             test_poisoned_data += inputs_bd.detach().cpu().numpy().tolist()
             test_poisoned_label += targets_bd.detach().cpu().numpy().tolist()
@@ -526,6 +547,37 @@ log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
 # copy model to 2 parts; fine tune on ISSBA frist
 model_clean = copy.deepcopy(model); model_mali = copy.deepcopy(model)
 
+# ------------------------------------------------ 4 --------------------------------------------------# 
+dl_bd_tr =  DataLoader(
+        ds_bd_tr,
+        batch_size=128,
+        shuffle=True,
+        num_workers=0)
+
+model_clean = model_clean.to(device)
+model_clean.train()
+optimizer = torch.optim.SGD(model_clean.parameters(), lr=0.001, momentum=0.9, weight_decay=5e-4); loss_=nn.CrossEntropyLoss() 
+for i in range(5):
+    loss_list = []
+    for inputs, targets in dl_bd_tr:
+        inputs = inputs.to(device)
+        targets = targets.to(device)
+        optimizer.zero_grad()
+        predict_digits = model_clean(inputs)
+        loss = loss_(predict_digits, targets)
+        loss.backward()
+        optimizer.step()
+        loss_list.append(loss.item())
+    msg = time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + 'Train [{}] Loss: {:.4f}\n'.format(i, np.mean(loss_list))
+    log(msg)
+
+torch.save(model_clean.state_dict(), folder_name+'/model_clean.pth')
+avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 
+                                                    model=model_clean, modelG=modelG, modelM=modelM, verbose=False)
+log_test(avg_acc_clean, avg_acc_bd, avg_acc_cross)
+
+
+# ------------------------------------------------ 5 --------------------------------------------------# 
 # TODO: tips when comparing with BATT, use high ratio
 
 def reset_grad(optimizer, d_optimizer):
@@ -546,6 +598,10 @@ def get_secret_acc(secret_true, secret_pred):
     return bit_acc
 
 def get_ISSBA_data(trainset, testset, poisoned_set, secret_size, bs_tr=128, poisoned_rate=0.1, encoder=None, y_target=None):
+    '''
+        return:
+            cln_train_dl, bd_train_dl
+    '''
     train_dl = DataLoader(
             trainset,
             batch_size=1,
@@ -588,33 +644,54 @@ def get_ISSBA_data(trainset, testset, poisoned_set, secret_size, bs_tr=128, pois
         batch_size=bd_bs,
         shuffle=True,
         num_workers=0) 
-    
-    first_batch = next(iter(bd_train_dl))
-    images, labels = first_batch
+    return cln_train_dl, bd_train_dl
 
-    # Print the shapes of the images and labels
-    print(f"Images shape: {images.shape}")
-    print(f"Labels shape: {labels.shape}")
-
-    # Optionally, check the type and dtype of labels
-    print(f"Labels type: {type(labels)}")
-    print(f"Labels dtype: {labels.dtype}")
-    
-
-    return cln_train_dl
-
-def train_model_ISSBA(model, trainset, testset, poisoned_set, epoch, secret_size, poisoned_rate, encoder, y_target):
-    cln_train_dl = get_ISSBA_data(trainset=trainset, testset=testset, poisoned_set=poisoned_set,
+def train_model_ISSBA(model, trainset, testset, poisoned_set, secret_size, poisoned_rate, encoder, y_target,
+                      lr, momentum, weight_decay, epoch, save_epoch_interval=1):
+    cln_train_dl, bd_train_dl = get_ISSBA_data(trainset=trainset, testset=testset, poisoned_set=poisoned_set,
                                   secret_size=secret_size, poisoned_rate=poisoned_rate, encoder=encoder, y_target=y_target)
+    model = model.to(device)
+    model.train()
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+    loss_=nn.CrossEntropyLoss() 
+    for i in range(epoch):
+            loss_list = []
+            for (inputs, targets), (inputs_trigger, targets_trigger) in zip(cln_train_dl, bd_train_dl):
+                inputs = torch.cat((inputs, inputs_trigger), 0)
+                targets = torch.cat((targets, targets_trigger), 0)
+
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+
+                optimizer.zero_grad()
+                predict_digits = model(inputs)
+                loss = loss_(predict_digits, targets)
+                loss.backward()
+                optimizer.step()
+                loss_list.append(loss.item())
+            msg = time.strftime("[%Y-%m-%d_%H:%M:%S] ", time.localtime()) + 'Train [{}] Loss: {:.4f}\n'.format(i, np.mean(loss_list))
+            log(msg)
+
+
+            if (i + 1) % save_epoch_interval == 0:
+                model.eval()
+                model = model.cpu()
+                ckpt_model_filename = "ckpt_epoch_" + str(i+1) + ".pth"
+                ckpt_model_path = os.path.join(folder_name, ckpt_model_filename)
+                torch.save(model.state_dict(), ckpt_model_path)
+                model = model.to(device)
+                model.train() 
     return model
 
-def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20, modelG=None,
-                modelM=None, verbose=True, y_target=0, bs_tr = 128, lr=0.001, epoch_ = 5, enc_total_epoch = 5):
+def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20, 
+                modelG=None,modelM=None, verbose=True, 
+                y_target=0, bs_tr = 128, lr=0.001,  enc_total_epoch = 5,
+                momentum=None, weight_decay=None, epoch_ = 5):
     '''
         return: 
             model_mali, encoder, decoder
     '''
-    print(len(ds_bd_tr), len(ds_bd_te))
+    print(f"backdoor training dataset size: {len(ds_bd_tr)}, backdoor test dataset size: {len(ds_bd_te)}")
     
     # train encoder - decoder
 
@@ -728,16 +805,19 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
     torch.save(state, savepath)
     
     # ------------------------------------- fin e-d training; training models now ----------------------------------------
-    train_model_ISSBA(model=model_mali, trainset=ds_bd_tr , testset=ds_bd_te, poisoned_set=poisoned_set,
-                      epoch=epoch_, secret_size=secret_size, poisoned_rate=poison_ratio, encoder=encoder, y_target=y_target)
+    model_mali = train_model_ISSBA(model=model_mali, trainset=ds_bd_tr , testset=ds_bd_te, poisoned_set=poisoned_set,
+                    secret_size=secret_size, poisoned_rate=poison_ratio, encoder=encoder, y_target=y_target,
+                    lr=lr, momentum=momentum, weight_decay=weight_decay, epoch=epoch_)
         
     
     return model_mali, encoder, decoder
 
 # TODO: change this back to 5 (enc_total_epoch)
 model_mali, encoder, decoder = train_ISSBA(ds_bd_tr=ds_bd_tr, ds_bd_te=ds_bd_te, 
-                                           model_mali=model_mali, modelG=modelG, modelM=modelM, y_target=y_target_ISSBA,
-                                           enc_total_epoch=1)
+                                           model_mali=model_mali, poison_ratio=0.1, secret_size=20, 
+                                           modelG=modelG, modelM=modelM, verbose=True, y_target=y_target_ISSBA, 
+                                           bs_tr=128, lr=0.001, enc_total_epoch=5,
+                                           momentum=0.9, weight_decay=5e-4, epoch_=5)
 
 torch.save(model_mali.state_dict(), folder_name+'/model_mali.pth')
 avg_acc_clean, avg_acc_bd, avg_acc_cross = test_IAD(ds_te=ds_secure_te, ds_te1=ds_secure_te, 

@@ -842,6 +842,7 @@ class ISSBA(Base):
                 residual = encoder([secret, img])
                 encoded_image = img + residual
                 encoded_image = encoded_image.clamp(0, 1)
+                # print(encoded_image.shape); import sys; sys.exit()
                 bd_train_dataset.append(encoded_image.cpu().detach().tolist()[0])
                 bd_train_labset.append(self.y_target)
             else:
@@ -900,6 +901,7 @@ class ISSBA(Base):
         msg = f"Total train samples: {len(self.train_dataset)}\nTotal test samples: {len(self.test_dataset)}\nBatch size: {self.current_schedule['batch_size']}\niteration every epoch: {len(self.train_dataset) // self.current_schedule['batch_size']}\nInitial learning rate: {self.current_schedule['lr']}\n"
         self.log(msg)
 
+        print(len(cln_train_dl), len(bd_train_dl))
         for i in range(self.current_schedule['epochs']):
             self.adjust_learning_rate(optimizer, i)
             loss_list = []
