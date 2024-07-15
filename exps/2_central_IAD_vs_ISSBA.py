@@ -727,10 +727,10 @@ def train_ISSBA(ds_bd_tr, ds_bd_te, model_mali, poison_ratio=0.1, secret_size=20
     discriminator = Discriminator(in_channel=3).to(device)
 
     train_dl = DataLoader(
-            train_steg_set,
-            batch_size=32,
-            shuffle=True,
-            )
+        train_steg_set,
+        batch_size=32,
+        shuffle=True,
+    )
     
      # defualt 20 
     enc_secret_only_epoch = 2 
