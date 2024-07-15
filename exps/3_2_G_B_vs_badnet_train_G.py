@@ -3,13 +3,14 @@ from torch.utils.data import DataLoader
 import sys
 import copy
 import numpy as np
+import lpips
 
 sys.path.append('..')
 import core
 from myutils import utils_data, utils_attack
 
 exp_dir = '../experiments/exp3_GB'; label_backdoor = 6; triggerY = 6; triggerX = 6
-epoch_step2 = 100; delta_ = 0.2; lr_step2 = 1e-4 
+epoch_step2 = 200; delta_ = 0.2; lr_step2 = 0.01 
 
 # collect X_root, X_root_{test}, X_q, _ 
 ds_tr, ds_te, ds_x_root, ds_x_root_test, ds_x_q, ds_x_q_te = utils_data.prepare_CIFAR10_datasets(folder_=exp_dir, INITIAL_RUN=False)
@@ -65,7 +66,7 @@ for param in model.parameters():
 
 encoder = utils_attack.Encoder(); encoder = encoder.to(device)
 optimizer = torch.optim.Adam(encoder.parameters(), lr=lr_step2)
-
+loss_fn_alex = lpips.LPIPS(net='alex').cuda()
 for epoch in range(epoch_step2):
     encoder.train()
     running_loss = 0.0
@@ -77,15 +78,19 @@ for epoch in range(epoch_step2):
         noisy_image = encoder(inputs)
         outputs = model(noisy_image)
 
-        loss = utils_attack.uniform_distribution_loss(outputs)
+        loss_fool = utils_attack.uniform_distribution_loss(outputs)
+        los_mse = utils_attack.reconstruction_loss(inputs, noisy_image)
+        lpips_loss_op = loss_fn_alex(inputs,noisy_image)
+        loss = loss_fool+2.0*los_mse+2.0*lpips_loss_op.mean()
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
 
-    if (epoch+1)%5==0 or epoch==epoch_step2-1 or epoch==0:
+    if (epoch+1)%10==0 or epoch==epoch_step2-1 or epoch==0:
         print(f'Epoch [{epoch+1}/{epoch_step2}], Loss: {running_loss/len(dl_x_root):.4f}')
-        torch.save(encoder.state_dict(), exp_dir+'/'+f'encoder_{epoch+1}.pth')
+    if (epoch+1)%50==0 or epoch==epoch_step2-1 or epoch==0:
+        torch.save(encoder.state_dict(), exp_dir+'/'+f'encoder_2mse_2lpips_{epoch+1}.pth')
 
 
 

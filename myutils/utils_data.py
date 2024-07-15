@@ -4,6 +4,8 @@ from torchvision.datasets import DatasetFolder, CIFAR10
 from torch.utils.data import random_split
 import torch
 import hashlib
+import numpy as np
+import matplotlib.pyplot as plt
 
 def get_indices_hash(indices):
     indices_bytes = torch.tensor(indices).numpy().tobytes()
@@ -68,3 +70,29 @@ EXPECTED_X_Q_FILE = 'expected_x_q_indices.pt', seed=42, INITIAL_RUN=True):
             "The X_q subset indices do not match the expected indices"
 
     return trainset, testset, subset_tr, subset_te, ds_bd_tr, ds_bd_te
+
+def unnormalize(img, mean, std):
+    for t, m, s in zip(img, mean, std):
+        t.mul_(s).add_(m)  # inverse normalization
+    return img
+
+def predict_labels(model, images):
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        outputs = model(images)
+        _, predicted = torch.max(outputs, 1)
+    return predicted
+
+def predict_logits(model, images):
+    model.eval()  # Set the model to evaluation mode
+    with torch.no_grad():
+        outputs = model(images)
+    return outputs
+
+def truncate_logits(logits):
+    truncated_logits = []
+    for logit in logits:
+        truncated_logit = ', '.join(f'{val:.2f}' for val in logit)
+        truncated_logits.append(truncated_logit)
+    return truncated_logits
+

@@ -44,7 +44,6 @@ criterion = nn.CrossEntropyLoss()
 for epoch_ in range(epoch_step1):
     for inputs, targets in dl_x_q:
         inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
-        # TODO: use this to print backdoored image as pdf file
         num_poisoned_batch = int(0.1*len(inputs_bd)) 
         for xx in range(num_poisoned_batch):
             inputs_bd[xx] = utils_attack.add_badnet_trigger(inputs=inputs_bd[xx], triggerY=triggerY, triggerX=triggerX) 
