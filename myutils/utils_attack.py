@@ -25,7 +25,7 @@ class Encoder(nn.Module):
 
 class Encoder_mask(nn.Module):
     def __init__(self):
-        super(Encoder, self).__init__()
+        super(Encoder_mask, self).__init__()
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(16, 3, kernel_size=3, padding=1)
     
