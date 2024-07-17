@@ -113,7 +113,7 @@ for idx, (ax, img) in enumerate(zip(axes[2].ravel(), images_G)):
     ax.imshow(np.transpose(img.cpu().numpy(), (1, 2, 0)))
     ax.axis('off')
     ax.set_title(f'{ds_te.classes[predicted_labels_G_label[idx]]}')
-    print(F.softmax(predicted_labels_G_logits[idx]))
+    # print(F.softmax(predicted_labels_G_logits[idx]))
 
 for idx, (ax, img) in enumerate(zip(axes[3].ravel(), images_bd_G)):
     img = utils_data.unnormalize(img, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
@@ -125,9 +125,48 @@ plt.tight_layout()
 
 
 # Save the figure to a PDF file
-pdf_filename = exp_dir+'/'+'cifar10_images_2_mse_2_lpips.pdf'
+pdf_filename = exp_dir+'/'+'cifar10_images_ISSBA_vs_masked_encoder_step_2.pdf'
 with PdfPages(pdf_filename) as pdf:
     pdf.savefig(fig)
     plt.close()
 
 print(f"PDF saved as {pdf_filename}")
+
+# print masked ASR
+
+
+np.random.seed(42)
+secret = torch.FloatTensor(np.random.binomial(1, .5, secret_size).tolist()).to(device)
+with torch.no_grad():
+    bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+    for inputs, targets in dl_te:
+        inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+        for xx in range(len(inputs_bd)):
+            if targets_bd[xx]!=label_backdoor:
+                secret_ = secret.unsqueeze(0)
+                residual = encoder_ISSBA([secret_, inputs_bd[xx].unsqueeze(0).to(device)])
+                encoded_image = residual.squeeze().cpu()+ inputs_bd[xx] 
+                encoded_image = encoded_image.clamp(0, 1)
+                
+                noisy_image = encoder(encoded_image.to(device), mask).to(device)
+                inputs_bd[xx] = encoded_image.to(device)* (1 - mask) + noisy_image * mask
+
+                targets_bd[xx] = label_backdoor
+                bd_num+=1
+            else:
+                targets_bd[xx] = -1
+        inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+        inputs, targets = inputs.to(device), targets.to(device)
+        bd_log_probs = model(inputs_bd)
+        bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+        bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+
+        noisy_image = encoder(inputs, mask)
+        encoded_inputs = inputs*(1 - mask) + noisy_image * mask
+        log_probs = model(encoded_inputs)
+        y_pred = log_probs.data.max(1, keepdim=True)[1]
+        cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+        cln_num += len(inputs)
+    ASR = 100.00 * float(bd_correct) / bd_num 
+    ACC = 100.00 * float(cln_correct) / cln_num
+    print(f'loaded model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
