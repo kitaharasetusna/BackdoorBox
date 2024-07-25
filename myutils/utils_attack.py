@@ -36,7 +36,8 @@ def test_asr_acc_badnet(dl_te, model, label_backdoor, triggerX, triggerY, device
             cln_num += len(inputs)
         ASR = 100.00 * float(bd_correct) / bd_num 
         ACC = 100.00 * float(cln_correct) / cln_num
-        print(f'loaded model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+
 # --------------------------------------------------------- UAP  ---------------------------------------------------------------
 class Encoder(nn.Module):
     def __init__(self):
