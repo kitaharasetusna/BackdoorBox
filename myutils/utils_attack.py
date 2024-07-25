@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pickle
 import numpy as np
+import copy
 
 # -------------------------------------------------------- badnet ---------------------------------------------------------------
 def add_badnet_trigger(inputs, triggerY, triggerX, size=5):
@@ -11,6 +12,31 @@ def add_badnet_trigger(inputs, triggerY, triggerX, size=5):
             triggerX:triggerX+size] = pixel_max
     return inputs
 
+def test_asr_acc_badnet(dl_te, model, label_backdoor, triggerX, triggerY, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    inputs_bd[xx] = add_badnet_trigger(inputs=inputs_bd[xx], triggerY=triggerY, triggerX=triggerX)
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'loaded model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
 # --------------------------------------------------------- UAP  ---------------------------------------------------------------
 class Encoder(nn.Module):
     def __init__(self):
