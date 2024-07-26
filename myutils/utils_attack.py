@@ -144,6 +144,39 @@ def reset_grad(optimizer, d_optimizer):
     optimizer.zero_grad()
     d_optimizer.zero_grad()     
 
+def add_ISSBA_trigger(inputs, secret, encoder, device):
+    image_input, secret_input = inputs.to(device), secret.to(device)
+    residual = encoder([secret_input.unsqueeze(0), image_input.unsqueeze(0)])
+    encoded_image = inputs.to(device)+ residual
+    # encoded_image = encoded_image.clamp(0, 1)
+    return encoded_image.squeeze(0) 
+
+def test_asr_acc_ISSBA(dl_te, model, label_backdoor, secret, encoder, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    inputs_bd[xx] = add_ISSBA_trigger(inputs=inputs_bd[xx], secret=secret,
+                                                      encoder=encoder, device=device) 
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
 
 def get_secret_acc(secret_true, secret_pred):
     """The accurate for the steganography secret.
