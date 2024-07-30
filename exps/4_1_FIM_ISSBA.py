@@ -23,17 +23,18 @@ torch.manual_seed(42)
 def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, device):
     ''' get FIM while training on training data
         returns:
-            avg_trace_fim, avg_trace_fim_bd: clean samples FIM, backdoor samples FIM
+            avg_trace_fim, avg_trace_fim_bd, avg_loss, avg_loss_bd 
             
     '''
     num_poison = int(ratio_poison*bs_tr)
-    avg_trace_fim = 0.0; avg_trace_fim_bd = 0.0
+    avg_trace_fim = 0.0; avg_trace_fim_bd = 0.0; avg_loss = 0.0; avg_loss_bd = 0.0
     cln_num = 0; bd_num = 0
     for images, labels in dl_train:
         cln_num+=(bs_tr-num_poison); bd_num+=num_poison
-        avg_trace_fim += utils_defence.compute_fisher_information(model, images[num_poison:], 
+        trace_fim_cln, loss_cln = utils_defence.compute_fisher_information(model, images[num_poison:], 
                                                                 labels[num_poison:], criterion,
-                                                                device= device)
+                                                                device= device, loss_=True)
+        avg_trace_fim += trace_fim_cln; avg_loss+=loss_cln
         inputs_bd, targets_bd = copy.deepcopy(images), copy.deepcopy(labels)
         for xx in range(num_poison):
             inputs_bd[xx] = utils_attack.add_ISSBA_trigger(inputs=inputs_bd[xx], secret=secret,
@@ -41,13 +42,17 @@ def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, d
             # inputs_bd[xx] = utils_attack.add_badnet_trigger(inputs=inputs_bd[xx], triggerY=triggerY,
             #                                                 triggerX=triggerX) 
             targets_bd[xx] = label_backdoor
-        avg_trace_fim_bd += utils_defence.compute_fisher_information(model, inputs_bd[:num_poison], 
+        trace_fim_bd, loss_bd = utils_defence.compute_fisher_information(model, inputs_bd[:num_poison], 
                                                                     targets_bd[:num_poison], criterion,
-                                                                    device=device)
+                                                                    device=device, loss_=True)
+        avg_trace_fim_bd += trace_fim_bd; avg_loss_bd+=loss_bd
     avg_trace_fim = avg_trace_fim/(1.0*cln_num); avg_trace_fim_bd = avg_trace_fim_bd/(1.0*bd_num)
-    print(f'fim clean: {avg_trace_fim: .2e}')
-    print(f'fim bd: {avg_trace_fim_bd: .2e}')   
-    return avg_trace_fim, avg_trace_fim_bd
+    avg_loss = avg_loss/(1.0*cln_num); avg_loss_bd = avg_loss_bd/(1.0*bd_num)
+    print(f'fim clean: {avg_trace_fim: .2f}')
+    print(f'fim bd: {avg_trace_fim_bd: .2f}')   
+    print(f'loss clean: {avg_loss: 2f}')
+    print(f'loss bd: {avg_loss_bd: .2f}')
+    return avg_trace_fim, avg_trace_fim_bd, avg_loss, avg_loss_bd
 
 # configs:
 exp_dir = '../experiments/exp4_FIM/ISSBA'; label_backdoor = 6
@@ -192,6 +197,7 @@ if verbose==True:
             plt.savefig(exp_dir+f'/ISSBA_{index}.pdf')
 
 FIM_cln, FIM_bd = [], []
+loss_cln, loss_bd = [], []
 # train model on X_q
 num_poison = int(ratio_poison*bs_tr)
 # TODO: set numpy seed for this secret
@@ -218,18 +224,20 @@ for epoch_ in range(epoch_step1):
         optimizer.step()
     
     # TODO: make this get_train_fm_ISSBA 
-    avg_trace_fim, avg_trace_fim_bd = get_train_fim_ISSBA(model=model, dl_train=dl_x_q,
+    print(f'epoch: {epoch_+1}')
+    avg_trace_fim, avg_trace_fim_bd, avg_loss_cln, avg_loss_bd = get_train_fim_ISSBA(model=model, dl_train=dl_x_q,
                                                           encoder=encoder, secret=secret,
                                                           ratio_poison=ratio_poison, bs_tr=bs_tr,
                                                           device=device)
     model.train()
-    print(f'epoch: {epoch_+1}, clean FIM: {avg_trace_fim: .2e}, malicious FIM: {avg_trace_fim_bd: .2e}')
+    
     FIM_cln.append(avg_trace_fim); FIM_bd.append(avg_trace_fim_bd)
+    loss_cln.append(avg_loss_cln); loss_bd.append(avg_loss_bd)
+    with open(exp_dir+'/FIM.pkl', 'wb') as f:
+        pickle.dump({'clean FIM': FIM_cln, 'backdoor FIM': FIM_bd, 'clean loss': avg_loss_cln, 'backdoor loss': avg_loss_bd}, f)
     if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_step1-1:
         model.eval()
         utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder, device=device)
         torch.save(model.state_dict(), exp_dir+'/'+f'model_{epoch_+1}.pth')
-        with open(exp_dir+'/FIM.pkl', 'wb') as f:
-            pickle.dump({'clean FIM': FIM_cln, 'backdoor FIM': FIM_bd}, f)
         model.train()

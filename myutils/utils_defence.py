@@ -1,6 +1,6 @@
 import torch
 
-def compute_fisher_information(model, images, labels, criterion, device='cpu'):
+def compute_fisher_information(model, images, labels, criterion, device='cpu', mode='sum', loss_=False):
     """
     Compute the average of the trace of the Fisher Information Matrix (FIM) for a given model and a batch of samples.
 
@@ -29,7 +29,7 @@ def compute_fisher_information(model, images, labels, criterion, device='cpu'):
     loss.backward()
 
     # Compute the sum of the diagonal elements of the FIM
-    fim_diagonal_sum = 0
+    fim_diagonal_sum = 0; running_loss = loss.item() 
     num_params = 0
     for param in model.parameters():
         if param.requires_grad:
@@ -38,6 +38,12 @@ def compute_fisher_information(model, images, labels, criterion, device='cpu'):
             num_params += grad.numel()
     
     # Calculate the average trace value
-    avg_trace = fim_diagonal_sum / num_params
-
-    return avg_trace
+    if mode=='sum':
+        if loss_ == True:
+            return fim_diagonal_sum, running_loss
+        else:
+            return fim_diagonal_sum 
+    else:
+        # TODO: add if loss==True judgement
+        avg_trace = fim_diagonal_sum / num_params
+        return avg_trace
