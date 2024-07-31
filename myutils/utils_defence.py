@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 def compute_fisher_information(model, images, labels, criterion, device='cpu', mode='sum', loss_=False):
     """
@@ -47,3 +48,33 @@ def compute_fisher_information(model, images, labels, criterion, device='cpu', m
         # TODO: add if loss==True judgement
         avg_trace = fim_diagonal_sum / num_params
         return avg_trace
+
+
+def gaussian_kernel(x, y, sigma=0.01):
+    return torch.exp(-torch.sum((x - y) ** 2) / (2 * sigma ** 2))
+
+def mmd_loss(A, B, sigma=0.01):
+    # Flatten the batches
+    A_flat = A.view(A.size(0), -1)
+    B_flat = B.view(B.size(0), -1)
+    
+    # Compute the kernel values
+    xx = torch.mean(gaussian_kernel(A_flat.unsqueeze(1), A_flat.unsqueeze(0), sigma))
+    yy = torch.mean(gaussian_kernel(B_flat.unsqueeze(1), B_flat.unsqueeze(0), sigma))
+    xy = torch.mean(gaussian_kernel(A_flat.unsqueeze(1), B_flat.unsqueeze(0), sigma))
+    
+    # Compute MMD
+    mmd = xx + yy - 2 * xy
+    return mmd
+
+def wasserstein_distance(A, B):
+    # Flatten the batches
+    A_flat = A.view(A.size(0), -1)
+    B_flat = B.view(B.size(0), -1)
+    
+    # Compute pairwise distances
+    dist = torch.cdist(A_flat, B_flat, p=1)
+    
+    # Compute the Wasserstein distance
+    wasserstein_dist = torch.mean(dist)
+    return wasserstein_dist

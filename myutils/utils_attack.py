@@ -50,6 +50,17 @@ class Encoder(nn.Module):
         x = torch.sigmoid(self.conv2(x))
         return x
 
+class Encoder_no(nn.Module):
+    def __init__(self):
+        super(Encoder_no, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(16, 3, kernel_size=3, padding=1)
+    
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = self.conv2(x)
+        return x
+
 class Encoder_mask(nn.Module):
     def __init__(self):
         super(Encoder_mask, self).__init__()
@@ -61,6 +72,7 @@ class Encoder_mask(nn.Module):
         x = F.relu(self.conv1(x))
         x = torch.sigmoid(self.conv2(x))
         return x
+
 
 def create_mask():
     mask = torch.ones((3, 32, 32), dtype=torch.float32)

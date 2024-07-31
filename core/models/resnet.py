@@ -93,6 +93,16 @@ class _ResNet(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
+    
+    def feature_(self, x):
+        out = F.relu(self.bn1(self.conv1(x)))
+        out_1 = self.layer1(out)
+        out_2 = self.layer2(out_1)
+        out_3 = self.layer3(out_2)
+        out_4 = self.layer4(out_3)
+        # out = F.avg_pool2d(out, 4)
+        # out = out.view(out.size(0), -1)
+        return out_1, out_2, out_3, out_4
 
 
 def ResNet(num, num_classes=10):
