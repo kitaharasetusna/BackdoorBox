@@ -177,6 +177,7 @@ def test_asr_acc_ISSBA(dl_te, model, label_backdoor, secret, encoder, device):
         ASR = 100.00 * float(bd_correct) / bd_num 
         ACC = 100.00 * float(cln_correct) / cln_num
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        return ACC, ASR
 
 def get_secret_acc(secret_true, secret_pred):
     """The accurate for the steganography secret.

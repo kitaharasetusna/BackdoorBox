@@ -198,6 +198,7 @@ if verbose==True:
 
 FIM_cln, FIM_bd = [], []
 loss_cln, loss_bd = [], []
+ACC, BSR = [], []
 # train model on X_q
 num_poison = int(ratio_poison*bs_tr)
 # TODO: set numpy seed for this secret
@@ -234,10 +235,11 @@ for epoch_ in range(epoch_step1):
     FIM_cln.append(avg_trace_fim); FIM_bd.append(avg_trace_fim_bd)
     loss_cln.append(avg_loss_cln); loss_bd.append(avg_loss_bd)
     with open(exp_dir+'/FIM.pkl', 'wb') as f:
-        pickle.dump({'clean FIM': FIM_cln, 'backdoor FIM': FIM_bd, 'clean loss': avg_loss_cln, 'backdoor loss': avg_loss_bd}, f)
+        pickle.dump({'clean FIM': FIM_cln, 'backdoor FIM': FIM_bd, 'clean loss': loss_cln, 'backdoor loss': loss_bd, 'acc': ACC, 'BSR': BSR}, f)
     if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_step1-1:
         model.eval()
-        utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+        ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder, device=device)
+        ACC.append(ACC_); BSR.append(ASR_)
         torch.save(model.state_dict(), exp_dir+'/'+f'model_{epoch_+1}.pth')
         model.train()
