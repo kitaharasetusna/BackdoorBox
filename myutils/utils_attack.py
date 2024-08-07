@@ -227,7 +227,12 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
         return ACC, ASR
 
 def fine_tune_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, secret, encoder, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    '''
     model.train()
+    ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder, device=device) 
     for ep_ in range(epoch):
         for inputs, targets in dl_root:
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
@@ -249,6 +254,28 @@ def fine_tune_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, sec
         print(f'epoch: {ep_+1}')
         ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder, device=device) 
+
+def fine_tune_pure_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, secret, encoder, optimizer, criterion):
+    '''fine tune'''
+    model.train()
+    ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder, device=device) 
+    for ep_ in range(epoch):
+        for inputs, targets in dl_root:
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss = criterion(outputs, targets)
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder, device=device) 
+
 
 def get_secret_acc(secret_true, secret_pred):
     """The accurate for the steganography secret.
