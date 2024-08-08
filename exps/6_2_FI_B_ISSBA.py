@@ -1,4 +1,4 @@
-# step1: train model
+# step2: pick up malicious samples
 
 import sys
 import torch
@@ -10,11 +10,13 @@ import os
 import pickle
 import lpips
 import numpy as np
+import pickle
 sys.path.append('..')
 import core
 from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminator
 from myutils import utils_data, utils_attack, utils_defence
 import matplotlib.pyplot as plt
+from torch.utils.data import Subset
 
 # Helper function to reset iterator if needed
 def get_next_batch(loader_iter, loader):
@@ -67,9 +69,9 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/ISSBA' 
 secret_size = 20; label_backdoor = 6 
-bs_tr = 128; epoch_ISSBA = 20; lr_ISSBA = 1e-4
+bs_tr = 128
 
-# ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
+# ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -84,10 +86,10 @@ savepath = os.path.join(exp_dir, 'encoder_decoder.pth'); state_pth = torch.load(
 encoder_issba.load_state_dict(state_pth['encoder_state_dict']) 
 secret = torch.FloatTensor(np.random.binomial(1, .5, secret_size).tolist()).to(device)
 model = core.models.ResNet(18); model = model.to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr_ISSBA)
+model.load_state_dict(torch.load(exp_dir+'/model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
-encoder_issba.eval()
+encoder_issba.eval(); model.eval()
 encoder_issba.requires_grad_(False)
 
 
@@ -98,38 +100,71 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-# ----------------------------------------- train model with ISSBA encoder
 ds_questioned = utils_attack.CustomCIFAR10ISSBA(
     ds_tr, ids_q, ids_p, label_backdoor, secret, encoder_issba, device)
-dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-    num_workers=0,drop_last=False,
-)
+# dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
+#     num_workers=0,drop_last=False,
+# )
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 
-model.train()
-ACC = []; ASR= []
-for epoch_ in range(epoch_ISSBA):
-    for inputs, targets in dl_x_q:
-        inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
-        # make a forward pass
-        outputs = model(inputs)
-        # calculate the loss
-        loss = criterion(outputs, targets)
-        # do a backwards pass
-        loss.backward()
-        # perform a single optimization step
-        optimizer.step()
-    # TODO: make this get_train_fm_ISSBA 
-    print(f'epoch: {epoch_+1}')
-    if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_ISSBA-1:
-        model.eval()
-        ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
-                                        secret=secret, encoder=encoder_issba, device=device)
-        ACC.append(ACC_); ASR.append(ASR_)
-        torch.save(model.state_dict(), exp_dir+'/'+f'model_{epoch_+1}.pth')
-        with open(exp_dir+f'/ISSBA_training.pkl', 'wb') as f:
-            pickle.dump({'ACC': ACC, 'ASR': ASR },f)
-        model.train()
+# ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+#                                         secret=secret, encoder=encoder_issba, device=device)
+ds_x_q2 = Subset(ds_tr, ids_q)
+dl_x_q2 = DataLoader(
+    dataset= ds_x_q2,
+    batch_size=bs_tr,
+    shuffle=True,
+    num_workers=0,
+    drop_last=False,
+)
+avg_trace_fim, avg_trace_fim_bd, avg_loss_cln, avg_loss_bd = get_train_fim_ISSBA(model=model, dl_train=dl_x_q2,
+                                                          encoder=encoder_issba, secret=secret,
+                                                          ratio_poison=0.1, bs_tr=bs_tr,
+                                                          device=device)
+print(avg_trace_fim, 'clean')
+print(avg_trace_fim_bd, 'bd')
+# ----------------------------------------- 1.1 compute average FI in root data
+# TODO:
+
+# ----------------------------------------- 1.2 pick up X suspicious
+from collections import defaultdict
+pick_upX = True 
+if pick_upX:
+    data = defaultdict(int)
+    for i in range(len(ds_questioned)):
+        image, label = ds_questioned[i]  
+        image, label = image.unsqueeze(0), torch.tensor(label).unsqueeze(0)
+        fi_value = utils_defence.compute_fisher_information(model=model, images=image, 
+                                                            labels=label, criterion=criterion,
+                                                            device=device, loss_=False)  # 计算FI值
+        idx_ori = ds_questioned.original_dataset.indices[i]
+        data[idx_ori] = fi_value
+        with open(exp_dir+'step_2_X_suspicious_dict.pkl', 'wb') as f:
+            pickle.dump(data, f)
+    sorted_items = sorted(data.items(), key=lambda item: item[1], reverse=True)
+    top_10_percent_count = max(1, len(sorted_items) * 10 // 100)
+    ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
+ 
+    
+
+    with open(exp_dir+'step_2_X_suspicious.pkl', 'wb') as f:
+        pickle.dump(ids_suspicious, f)
+else: 
+    with  open(exp_dir+'step_2_X_suspicious.pkl', 'rb') as f:
+        ids_suspicious = pickle.load(f)
+        print(len(ids_suspicious))
+        print(len(ids_p))
+    
+    TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
+    for s in ids_suspicious:
+        if s in ids_p:
+            TP+=1
+        else:
+            FP+=1
+    FN = len(ids_p)-TP if TP< len(ids_p) else 0
+    TN = len(ds_questioned)-FP
+    F1 = 2*TP/(2*TP+FP+FN)
+    recall = TP/(TP+FN)
+    print(F1, recall)
