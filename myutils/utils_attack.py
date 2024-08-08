@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import Subset
 import pickle
 import numpy as np
 import copy
@@ -162,6 +163,28 @@ def add_ISSBA_trigger(inputs, secret, encoder, device):
     encoded_image = inputs.to(device)+ residual
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0) 
+
+
+class CustomCIFAR10ISSBA(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, secret, encoder, device):
+        self.original_dataset = Subset(original_dataset, subset_indices)
+        self.trigger_indices = set(trigger_indices)
+        self.bd_label = label_bd
+        self.secret = secret
+        self.encoder = encoder
+        self.device = device
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_idx = self.original_dataset.indices[idx]  # Get the original index
+        image, label = self.original_dataset.dataset[original_idx]
+        # image = transforms.ToTensor()(image)  # Ensure image is a tensor
+        if original_idx in self.trigger_indices:
+            image = add_ISSBA_trigger(image, self.secret, self.encoder, self.device).cpu()
+            label = self.bd_label
+        return image, label
 
 def add_ISSBA_gen(inputs, B, device):
     image_input= inputs.to(device)
