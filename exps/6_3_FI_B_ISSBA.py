@@ -70,7 +70,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/ISSBA' 
 secret_size = 20; label_backdoor = 6 
 bs_tr = 128
-
+epoch_B = 10
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -90,7 +90,7 @@ model.load_state_dict(torch.load(exp_dir+'/model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 encoder_issba.eval(); model.eval()
-encoder_issba.requires_grad_(False)
+encoder_issba.requires_grad_(False); model.requires_grad_(False)
 
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
@@ -123,3 +123,42 @@ for s in idx_sus:
 print(TP/(TP+FP))
 
 # ----------------------------------------- 1 train B_theta  
+# prepare B
+ds_whole_poisoned = utils_attack.CustomCIFAR10ISSBA_whole(ds_tr, ids_p, label_backdoor, secret, encoder_issba, device)
+
+
+B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
+ds_x_root = Subset(ds_tr, ids_root)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
+# TODO: change this
+ds_sus = Subset(ds_whole_poisoned, ids_sus)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
+
+loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
+optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_step1)
+
+for epoch_ in range(epoch_B):
+    loss_sum = 0.0; loss_wass_sum = 0.0; loss_mse_sum = 0.0
+    for i in range(max(len(dl_root), len(dl_sus))):
+        X_root, _ = get_next_batch(loader_root_iter, dl_root)
+        X_q, _ = get_next_batch(loader_q_iter, dl_x_q)
+        # X_root
+        X_root, X_q = X_root.to(device), X_q.to(device)
+
+        optimizer.zero_grad()
+        B_root = B_theta(X_root)
+        
+        los_mse = utils_attack.reconstruction_loss(X_root, B_root) 
+        loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
+        loss = los_mse + 10*loss_wass
+        loss.backward()
+        optimizer.step()
+        loss_sum+=loss.item(); loss_mse_sum+=los_mse.item(); loss_wass_sum+=loss_wass.item()
+    print(f'epoch: {epoch_}, loss: {loss_sum/len(dl_x_q): .2f}')
+    print(f'loss mse: {loss_mse_sum/len(dl_x_q): .2f}')
+    print(f'loss wass: {loss_wass_sum/len(dl_x_q): .2f}')
+    if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
+        utils_attack.test_asr_acc_ISSBA_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                            B=B_theta, device=device)
+        torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
+

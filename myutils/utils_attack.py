@@ -186,6 +186,26 @@ class CustomCIFAR10ISSBA(torch.utils.data.Dataset):
             label = self.bd_label
         return image, label
 
+class CustomCIFAR10ISSBA_whole(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, trigger_indices, label_bd, secret, encoder, device):
+        self.original_dataset = original_dataset 
+        self.trigger_indices = set(trigger_indices)
+        self.bd_label = label_bd
+        self.secret = secret
+        self.encoder = encoder
+        self.device = device
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        image, label = self.original_dataset[idx]
+        # image = transforms.ToTensor()(image)  # Ensure image is a tensor
+        if idx in self.trigger_indices:
+            image = add_ISSBA_trigger(image, self.secret, self.encoder, self.device).cpu()
+            label = self.bd_label
+        return image, label
+
 def add_ISSBA_gen(inputs, B, device):
     image_input= inputs.to(device)
     encoded_image = B(image_input) 
