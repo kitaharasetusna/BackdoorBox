@@ -130,33 +130,33 @@ print(avg_trace_fim_bd, 'bd')
 
 # ----------------------------------------- 1.2 pick up X suspicious
 from collections import defaultdict
-pick_upX = True 
+pick_upX = False 
 if pick_upX:
     data = defaultdict(int)
+    print("start FI collecting")
     for i in range(len(ds_questioned)):
         image, label = ds_questioned[i]  
         image, label = image.unsqueeze(0), torch.tensor(label).unsqueeze(0)
-        fi_value = utils_defence.compute_fisher_information(model=model, images=image, 
+        fi_value, loss = utils_defence.compute_fisher_information(model=model, images=image, 
                                                             labels=label, criterion=criterion,
-                                                            device=device, loss_=False)  # 计算FI值
+                                                            device=device, loss_=True)  # 计算FI值
         idx_ori = ds_questioned.original_dataset.indices[i]
-        data[idx_ori] = fi_value
-        with open(exp_dir+'step_2_X_suspicious_dict.pkl', 'wb') as f:
-            pickle.dump(data, f)
-    sorted_items = sorted(data.items(), key=lambda item: item[1], reverse=True)
-    top_10_percent_count = max(1, len(sorted_items) * 10 // 100)
-    ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
- 
-    
-
-    with open(exp_dir+'step_2_X_suspicious.pkl', 'wb') as f:
-        pickle.dump(ids_suspicious, f)
+        print(idx_ori, fi_value, loss)
+        data[idx_ori] = (fi_value.item(), loss)
+    print("finish FI collecting")
+    with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'wb') as f:
+        pickle.dump(data, f)
+    print("finish FI saving")
 else: 
-    with  open(exp_dir+'step_2_X_suspicious.pkl', 'rb') as f:
-        ids_suspicious = pickle.load(f)
-        print(len(ids_suspicious))
-        print(len(ids_p))
-    
+    # with  open(exp_dir+'/step_2_X_suspicious.pkl', 'rb') as f:
+    #     ids_suspicious= pickle.load(f)
+    # print(len(ids_suspicious))
+    with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'rb') as f:
+        data = pickle.load(f)
+    # Filter keys with values greater than 27
+    sorted_items = sorted(data.items(), key=lambda item: item[1][1])
+    top_10_percent_count = max(1, len(sorted_items) * 1 // 100)
+    ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
     TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
     for s in ids_suspicious:
         if s in ids_p:
@@ -166,5 +166,5 @@ else:
     FN = len(ids_p)-TP if TP< len(ids_p) else 0
     TN = len(ds_questioned)-FP
     F1 = 2*TP/(2*TP+FP+FN)
-    recall = TP/(TP+FN)
-    print(F1, recall)
+    precision = TP/(TP+FP)
+    print(F1, precision)
