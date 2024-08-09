@@ -1,4 +1,4 @@
-# step2: pick up malicious samples
+# step3: pick up malicious samples
 
 import sys
 import torch
@@ -109,64 +109,17 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 
-# ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
-#                                         secret=secret, encoder=encoder_issba, device=device)
-ds_x_q2 = Subset(ds_tr, ids_q)
-dl_x_q2 = DataLoader(
-    dataset= ds_x_q2,
-    batch_size=bs_tr,
-    shuffle=True,
-    num_workers=0,
-    drop_last=False,
-)
-avg_trace_fim, avg_trace_fim_bd, avg_loss_cln, avg_loss_bd = get_train_fim_ISSBA(model=model, dl_train=dl_x_q2,
-                                                          encoder=encoder_issba, secret=secret,
-                                                          ratio_poison=0.1, bs_tr=bs_tr,
-                                                          device=device)
-print(avg_trace_fim, 'clean')
-print(avg_trace_fim_bd, 'bd')
-# ----------------------------------------- 1.1 compute average FI in root data
-# TODO:
+ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder_issba, device=device)
 
-# ----------------------------------------- 1.2 pick up X suspicious
-from collections import defaultdict
-pick_upX = False 
-if pick_upX:
-    data = defaultdict(int)
-    print("start FI collecting")
-    for i in range(len(ds_questioned)):
-        image, label = ds_questioned[i]  
-        image, label = image.unsqueeze(0), torch.tensor(label).unsqueeze(0)
-        fi_value, loss = utils_defence.compute_fisher_information(model=model, images=image, 
-                                                            labels=label, criterion=criterion,
-                                                            device=device, loss_=True)  # 计算FI值
-        idx_ori = ds_questioned.original_dataset.indices[i]
-        print(idx_ori, fi_value, loss)
-        data[idx_ori] = (fi_value.item(), loss)
-    print("finish FI collecting")
-    with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'wb') as f:
-        pickle.dump(data, f)
-    print("finish FI saving")
-else: 
-    # with  open(exp_dir+'/step_2_X_suspicious.pkl', 'rb') as f:
-    #     ids_suspicious= pickle.load(f)
-    # print(len(ids_suspicious))
-    with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'rb') as f:
-        data = pickle.load(f)
-    # Filter keys with values greater than 27
-    sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, len(sorted_items) * 1 // 100)
-    ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
-    with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
-        pickle.dump(ids_suspicious, f)
-    TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
-    for s in ids_suspicious:
-        if s in ids_p:
-            TP+=1
-        else:
-            FP+=1
-    FN = len(ids_p)-TP if TP< len(ids_p) else 0
-    TN = len(ds_questioned)-FP
-    F1 = 2*TP/(2*TP+FP+FN)
-    precision = TP/(TP+FP)
-    print(F1, precision)
+with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+    idx_sus = pickle.load(f)
+TP, FP = 0.0, 0.0
+for s in idx_sus:
+    if s in ids_p:
+        TP+=1
+    else:
+        FP+=1
+print(TP/(TP+FP))
+
+# ----------------------------------------- 1 train B_theta  
