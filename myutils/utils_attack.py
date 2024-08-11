@@ -269,6 +269,19 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
 
+def test_acc(dl_te, model, device):
+    model.eval()
+    cln_num = 0.0; cln_correct = 0.0
+    with torch.no_grad():
+        for inputs, targets in dl_te:
+            inputs, targets = inputs.to(device), targets.to(device)
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+    ACC = 100.00 * float(cln_correct) / cln_num
+    print(f"root data acc: {ACC}")
+
 def fine_tune_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, secret, encoder, optimizer, criterion):
     '''
     fine tune with B_theta
@@ -297,6 +310,7 @@ def fine_tune_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, sec
         print(f'epoch: {ep_+1}')
         ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder, device=device) 
+        test_acc(dl_te=dl_root, model=model, device=device)
 
 def fine_tune_ISSBA2(dl_root, model, label_backdoor, B, device, dl_te, epoch, secret, encoder, optimizer, criterion):
     '''
