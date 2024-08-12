@@ -173,11 +173,11 @@ for epoch_ in range(epoch_root):
         optimizer.step()
     print(f'epoch: {epoch_+1}')
     if True:
-        model_root.eval()
+        model.eval()
         ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder_issba, device=device)
         ACC.append(ACC_); ASR.append(ASR_)
-        torch.save(model_root.state_dict(), exp_dir+'/'+f'root_model_{epoch_+1}.pth')
+        torch.save(model.state_dict(), exp_dir+'/'+f'model_sus_cln_{epoch_+1}.pth')
         with open(exp_dir+f'/root_model_clean.pkl', 'wb') as f:
             pickle.dump({'ACC': ACC, 'ASR': ASR },f)
-        model_root.train()
+        model.train()
