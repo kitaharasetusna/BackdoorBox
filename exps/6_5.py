@@ -142,6 +142,10 @@ optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 # B_theta.load_state_dict(torch.load(pth_path))
 # B_theta.eval()
 # B_theta.requires_grad_(False) 
+pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
+B_theta.load_state_dict(torch.load(pth_path))
+B_theta.eval()
+B_theta.requires_grad_(False) 
 
 
 # -------------------------------------------- train backdoor using B theta on a clean model
@@ -151,13 +155,19 @@ criterion = nn.CrossEntropyLoss(); optimizer = torch.optim.Adam(model_root.param
 # utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model_root, label_backdoor=label_backdoor,
 #                                         secret=secret, encoder=encoder_issba, device=device)
 
-train_root = False 
+train_root = True 
 optimizer_B = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 if train_root:
     model_root.train()
     ACC = []; ASR= []
     for epoch_ in range(epoch_root):
         for inputs, targets in dl_root:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = utils_attack.add_ISSBA_gen(inputs=inputs_bd[xx], B=B_theta, device=device)
+                targets_bd[xx]  = label_backdoor
+            inputs = torch.cat((inputs_bd, inputs), dim=0)
+            targets = torch.cat((targets_bd, targets))
             inputs, targets = inputs.to(device), targets.to(device)
             optimizer.zero_grad()
             # make a forward pass
