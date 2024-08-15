@@ -11,17 +11,12 @@ import pickle
 import lpips
 import numpy as np
 import pickle
-import lpips
 sys.path.append('..')
 import core
 from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminator
 from myutils import utils_data, utils_attack, utils_defence
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset
-
-def comp_inf_norm(A, B):
-    infinity_norm = torch.max(torch.abs(A - B))
-    return infinity_norm
 
 # Helper function to reset iterator if needed
 def get_next_batch(loader_iter, loader):
@@ -72,23 +67,30 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/Badnet' 
-secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
-bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
-lr_B = 1e-4;epoch_B = 30 
-lr_ft = 1e-4
+exp_dir = '../experiments/exp6_FI_B/ISSBA' 
+secret_size = 20; label_backdoor = 6 
+bs_tr = 128
+epoch_B = 30; lr_B = 1e-4; lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
 
 device = torch.device("cuda:0")
-
+# Load ISSBA encoder
+encoder_issba = StegaStampEncoder(
+    secret_size=secret_size, 
+    height=32, 
+    width=32,
+    in_channel=3).to(device)
+savepath = os.path.join(exp_dir, 'encoder_decoder.pth'); state_pth = torch.load(savepath)
+encoder_issba.load_state_dict(state_pth['encoder_state_dict']) 
+secret = torch.FloatTensor(np.random.binomial(1, .5, secret_size).tolist()).to(device)
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_20.pth'))
+model.load_state_dict(torch.load(exp_dir+'/model_20.pth'))
 criterion = nn.CrossEntropyLoss()
 
-model.eval()
-model.requires_grad_(False)
+encoder_issba.eval(); model.eval()
+encoder_issba.requires_grad_(False); model.requires_grad_(False)
 
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
@@ -98,8 +100,8 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-ds_questioned = utils_attack.CustomCIFAR10Badnet(
-    ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
+ds_questioned = utils_attack.CustomCIFAR10ISSBA(
+    ds_tr, ids_q, ids_p, label_backdoor, secret, encoder_issba, device)
 # dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
 #     num_workers=0,drop_last=False,
 # )
@@ -107,9 +109,8 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 
-ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
-                        device=device)  
+ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder_issba, device=device)
 
 with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
@@ -123,8 +124,7 @@ print(TP/(TP+FP))
 
 # ----------------------------------------- 1 train B_theta  
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_backdoor,
-                                                           triggerX=triggerX, triggerY=triggerY)
+ds_whole_poisoned = utils_attack.CustomCIFAR10ISSBA_whole(ds_tr, ids_p, label_backdoor, secret, encoder_issba, device)
 
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
@@ -137,19 +137,12 @@ dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 
-train_B = True 
-
-def relu_(x, threshold=0.5):
-    if x>threshold:
-        return x 
-    else:
-        return torch.tensor(0.0)
+train_B = False 
 
 if train_B:
-    loss_fn_alex = lpips.LPIPS(net='alex').cuda()
     for epoch_ in range(epoch_B):
-        loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
         for i in range(max(len(dl_root), len(dl_sus))):
+            loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
             X_root, _ = get_next_batch(loader_root_iter, dl_root)
             X_q, _ = get_next_batch(loader_sus_iter, dl_sus)
             # X_root
@@ -160,19 +153,11 @@ if train_B:
             
             los_mse = utils_attack.reconstruction_loss(X_root, B_root) 
             logits_root = model(B_root); logits_q = model(X_q)
-            los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
-            los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
-            # lpips_loss_op = loss_fn_alex(X_root, B_root)
-            # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
-            # loss = 20*los_mse + loss_wass
-            if epoch_<=20:
-                loss = los_logits
-            else:
-                loss = los_logits+los_mse
-          
+            los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean') 
+            loss = los_logits+los_mse
             loss.backward()
             optimizer.step()
-            loss_mse_sum+=los_mse.item(); loss_logits_sum+=los_logits.item(); loss_inf_sum+=los_inf.item()
+            loss_mse_sum+=los_mse.item(); loss_logits_sum+=los_logits.item()
         print(f'epoch: {epoch_}')
         print(f'loss mse: {loss_mse_sum/len(dl_sus): .2f}')
         print(f'loss logits: {loss_logits_sum/len(dl_sus): .2f}')
@@ -182,36 +167,30 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{20}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
     for index in [100, 200, 300, 400, 500, 600]:
         with torch.no_grad(): 
-            image_, _=ds_x_root[index]; image_c = copy.deepcopy(image_) 
+            image_, _=ds_x_root[index]; 
             image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
-            tensor_ori = copy.deepcopy(image_).to(device)
             image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
-            encoded_image = utils_attack.add_badnet_trigger(image_c, triggerY=triggerY, triggerX=triggerX) 
-            tensor_badnet = copy.deepcopy(encoded_image).to(device)
+            residual = encoder_issba([secret, image])
+            encoded_image = image+ residual
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
-            plt.savefig(exp_dir+f'/badnet_{index}.pdf')
+            plt.savefig(exp_dir+f'/ISSBA_{index}.pdf')
 
             encoded_image = B_theta(image)
-            tensor_gen = copy.deepcopy(encoded_image).to(device)
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
             plt.savefig(exp_dir+f'/generated_{index}.pdf')
 
-            norm_ori_bad = comp_inf_norm(tensor_ori, tensor_badnet)
-            norm_ori_gen = comp_inf_norm(tensor_ori, tensor_gen)
-            norm_bad_gen = comp_inf_norm(tensor_gen, tensor_badnet)
-            print(f'ori-bad: {norm_ori_bad}, ori-gen: {norm_ori_gen}, gen-bad: {norm_bad_gen}')
             
     for param in model.parameters():
         param.requires_grad = True 
@@ -219,11 +198,9 @@ else:
     optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
-
-    utils_attack.fine_tune_Badnet2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
-                                B=B_theta, device=device, dl_te=dl_te, triggerX=triggerX, triggerY=triggerY,
-                                epoch=10, optimizer=optimizer, criterion=criterion,
-                                dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
+    utils_attack.fine_tune_ISSBA(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+                                B=B_theta, device=device, dl_te=dl_te, secret=secret, encoder=encoder_issba,
+                                epoch=10, optimizer=optimizer, criterion=criterion)
 
 
 
