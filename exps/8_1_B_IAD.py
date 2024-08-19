@@ -27,50 +27,6 @@ def get_dataloader_order(dataloader):
         order.extend(targets.tolist())
     return order
 
-class ModifyTarget:
-    def __init__(self, y_target):
-        self.y_target = y_target
-
-    def __call__(self, targets):
-        return torch.ones_like(targets) * self.y_target
-
-# TODO: change this to a per-sample attack and remove that to utills_attack
-def create_bd(
-        inputs, targets, modelG, modelM,
-        y_target, device
-    ):
-    '''
-        returns:
-        bd_inputs, bd_targets, patterns, masks_output, residual
-    '''
-    create_targets_bd = ModifyTarget(y_target)
-    bd_targets = create_targets_bd(targets).to(device)
-    patterns = modelG(inputs)
-    patterns = modelG.normalize_pattern(patterns)
-    masks_output = modelM.threshold(modelM(inputs))
-    residual = (patterns - inputs) * masks_output
-    bd_inputs = inputs + residual 
-    return bd_inputs, bd_targets, patterns, masks_output, residual
-
-def create_cross(
-        inputs1, 
-        inputs2, 
-        modelG, 
-        modelM
-    ):
-        """Construct the cross samples to implement the diversity loss in [1].
-        
-        Args:
-            inputs1 (torch.Tensor): Benign samples.
-            inputs2 (torch.Tensor): Benign samples different from inputs1.
-            modelG (torch.nn.Module): Backdoor trigger pattern generator.
-            modelM (torch.nn.Module): Backdoor trigger mask generator.
-        """
-        patterns2 = modelG(inputs2)
-        patterns2 = modelG.normalize_pattern(patterns2)
-        masks_output = modelM.threshold(modelM(inputs2))
-        inputs_cross = inputs1 + (patterns2 - inputs1) * masks_output
-        return inputs_cross, patterns2, masks_output
 
 # ----------------------------------------- 0.0 fix seed
 # Set the seed for NumPy
@@ -81,7 +37,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/IAD' 
 label_backdoor = 6
-bs_tr = 128; epoch_IAD = 20; lr_IAD = 1e-4
+bs_tr = 128; epoch_IAD = 40; lr_IAD = 1e-4
 epoch_M = 10; episilon=1e-7; lambda_div=1; mask_density=0.032; lambda_norm=100
 poisoned_rate = 0.1; cross_rate = 0.1
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
@@ -93,8 +49,9 @@ device = torch.device("cuda:0")
 model = core.models.ResNet(18); model = model.to(device)
 # optimizer = torch.optim.Adam(model.parameters(), lr=lr_IAD)
 criterion = nn.CrossEntropyLoss()
-optimizerC = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
-schedulerC = torch.optim.lr_scheduler.MultiStepLR(optimizerC, [100, 200, 300, 400], 0.1)
+optimizerC = torch.optim.Adam(model.parameters(), lr=lr_IAD)
+#optimizerC = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=5e-4)
+# schedulerC = torch.optim.lr_scheduler.MultiStepLR(optimizerC, [100, 200, 300, 400], 0.1)
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
@@ -103,7 +60,9 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-
+dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
+    num_workers=0, drop_last=False
+)
 #--------------------------------------------train M and G and model 
 modelM = Generator('cifar10', out_channels=1).to(device)
 optimizerM = torch.optim.Adam(modelM.parameters(), lr=0.01, betas=(0.5, 0.9))
@@ -115,17 +74,6 @@ schedulerG = torch.optim.lr_scheduler.MultiStepLR(optimizerG, [200, 300, 400, 50
 
 train_M = False 
 if train_M:
-    # train M first
-    # load_idx_M = True
-    # if load_idx_M == False:
-    #     sample_size = int(len(ids_q) * 0.1)
-    #     ids_M = random.sample(ids_q, sample_size)
-    #     with open(exp_dir+'/step1_M_idx.pkl', 'wb') as f:
-    #         pickle.dump(ids_M, f)
-    # else:
-    #     with open(exp_dir+'/step1_M_idx.pkl', 'rb') as f:
-    #         ids_M = pickle.load(f)
-
     ds_M = Subset(ds_tr, ids_q) 
 
     dl_M_1 = DataLoader(dataset=ds_M,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
@@ -182,6 +130,8 @@ if train_G:
 
     order_1 = get_dataloader_order(dl_M_1); order_2 = get_dataloader_order(dl_M_2); 
     assert order_1!=order_2, "ds_tr for training diversity loss failed to have different order" 
+
+    ACC = []; ASR= []
     for i in range(epoch_IAD):
         model.train()
         modelG.train()
@@ -209,8 +159,8 @@ if train_G:
             num_bd = int(poisoned_rate * bs)
             num_cross = int(cross_rate * bs)
 
-            inputs_bd, targets_bd, patterns1, masks1, residual = create_bd(inputs1[:num_bd], targets1[:num_bd], modelG, modelM, y_target=label_backdoor,device=device)
-            inputs_cross, patterns2, masks2 = create_cross(
+            inputs_bd, targets_bd, patterns1, masks1, residual = utils_attack.create_bd(inputs1[:num_bd], targets1[:num_bd], modelG, modelM, y_target=label_backdoor,device=device)
+            inputs_cross, patterns2, masks2 = utils_attack.create_cross(
                 inputs1[num_bd : num_bd + num_cross], inputs2[num_bd : num_bd + num_cross], modelG, modelM
             )
 
@@ -271,51 +221,27 @@ if train_G:
             # Saving images for debugging
             if batch_idx == len(dl_M_1) - 2:
                 images = modelG.denormalize_pattern(torch.cat((inputs1[:num_bd], inputs_bd), dim=2))
-                file_name = exp_dir+"/{}_images.png".format('cifar10')
+                file_name = exp_dir+"/{}_images.pdf".format('cifar10')
                 file_path = file_name 
                 torchvision.utils.save_image(images, file_path, normalize=True, pad_value=1)
-        schedulerC.step()
+        # schedulerC.step()
         schedulerG.step()
         print(f'ASR: {acc_bd: .2f}, ACC: {acc_clean}, CROSS: {acc_cross}')
+        if i==0 or i==epoch_IAD-1 or (i+1)%5==0:
+            model.eval()
+            modelM.eval()
+            ACC_, ASR_ = utils_attack.test_asr_acc_IAD(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                       M=modelM,G=modelG, device=device)
+            ACC.append(ACC_); ASR.append(ASR_)
+            with open(exp_dir+f'/step1_train_IAD.pkl', 'wb') as f:
+                pickle.dump({'ACC': ACC, 'ASR': ASR },f)
+            torch.save(copy.deepcopy(model.state_dict()), exp_dir+f'/step1_{i+1}_model.pth')
+            torch.save(copy.deepcopy(modelG.state_dict()), exp_dir+f'/step1_{i+1}_G.pth')
+            model.train()
+            modelM.train()
 
-sys.exit(0)
 
 
 
-# -----------------------------------------collect dataset 
-# TODO: change dataset below
-ds_questioned = utils_attack.CustomCIFAR10Badnet(
-    ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
-dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-    num_workers=0,drop_last=False,
-)
-dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
-    num_workers=0, drop_last=False
-)
 
-model.train()
-ACC = []; ASR= []
-for epoch_ in range(epoch_Badnet):
-    for inputs, targets in dl_x_q:
-        inputs, targets = inputs.to(device), targets.to(device)
-        optimizer.zero_grad()
-        # make a forward pass
-        outputs = model(inputs)
-        # calculate the loss
-        loss = criterion(outputs, targets)
-        # do a backwards pass
-        loss.backward()
-        # perform a single optimization step
-        optimizer.step()
-    # TODO: make this get_train_fm_ISSBA 
-    print(f'epoch: {epoch_+1}')
-    if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_Badnet-1:
-        model.eval()
-        ACC_, ASR_ = utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
-                        device=device) 
-        ACC.append(ACC_); ASR.append(ASR_)
-        torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')
-        with open(exp_dir+f'/step1_train_badnet.pkl', 'wb') as f:
-            pickle.dump({'ACC': ACC, 'ASR': ASR },f)
-        model.train()
+
