@@ -630,3 +630,87 @@ def create_cross(
         masks_output = modelM.threshold(modelM(inputs2))
         inputs_cross = inputs1 + (patterns2 - inputs1) * masks_output
         return inputs_cross, patterns2, masks_output
+
+
+
+# --------------------------------------------------------- WaNet --------------------------------------------------------------
+def gen_grid(height, k):
+    """Generate an identity grid with shape 1*height*height*2 and a noise grid with shape 1*height*height*2
+    according to the input height ``height`` and the uniform grid size ``k``.
+    """
+    ins = torch.rand(1, 2, k, k) * 2 - 1
+    ins = ins / torch.mean(torch.abs(ins))  # a uniform grid
+    noise_grid = nn.functional.upsample(ins, size=height, mode="bicubic", align_corners=True)
+    noise_grid = noise_grid.permute(0, 2, 3, 1)  # 1*height*height*2
+    array1d = torch.linspace(-1, 1, steps=height)  # 1D coordinate divided by height in [-1, 1]
+    x, y = torch.meshgrid(array1d, array1d)  # 2D coordinates height*height
+    identity_grid = torch.stack((y, x), 2)[None, ...]  # 1*height*height*2
+
+    return identity_grid, noise_grid
+
+def add_WaNet_trigger(inputs, identity_grid, noise_grid, noise=False, s=0.5, grid_rescale=1, noise_rescale=2):
+    # inputs (3, 32, 32); outputs: (3, 32, 32)
+    # identity_grid, noise_gird: (1, 32, 32, 2)
+    h = identity_grid.shape[2]
+    grid =identity_grid + s * noise_grid / h
+    grid = torch.clamp(grid *grid_rescale, -1, 1)
+    if noise:
+        ins = torch.rand(1, h, h, 2) * noise_rescale - 1  # [-1, 1]
+        grid = torch.clamp(grid + ins/h, -1, 1)
+    inputs = nn.functional.grid_sample(inputs.unsqueeze(0), grid, align_corners=True).squeeze()  # CHW
+    return inputs
+
+
+class CustomCIFAR10WaNet(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, noise_ids, label_bd, identity_grid, noise_grid):
+        self.original_dataset = Subset(original_dataset, subset_indices)
+        self.trigger_indices = set(trigger_indices)
+        self.noise_ids = set(noise_ids)
+        self.bd_label = label_bd
+        self.identity_grid  = identity_grid
+        self.noise_grid = noise_grid
+         
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_idx = self.original_dataset.indices[idx]  # Get the original index
+        image, label = self.original_dataset.dataset[original_idx]
+        
+        if original_idx in self.trigger_indices:
+            image = add_WaNet_trigger(inputs=image, identity_grid=self.identity_grid, 
+                              noise_grid=self.noise_grid)
+            label = self.bd_label
+        elif original_idx in self.noise_ids:
+            image = add_WaNet_trigger(inputs=image, identity_grid=self.identity_grid, 
+                              noise_grid=self.noise_grid, noise=True)
+        return image, label
+
+def test_asr_acc_wanet(dl_te, model, label_backdoor, identity_grid, noise_grid, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    inputs_bd[xx] = add_WaNet_trigger(inputs=inputs_bd[xx], identity_grid=identity_grid,
+                                                      noise_grid=noise_grid)
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+    return ACC, ASR
