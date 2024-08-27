@@ -190,7 +190,7 @@ def prepare_CIFAR10_datasets_3(foloder, load=False, seed=42):
         ids_q = indices[split:]
 
         # spilit questioned into poisoned 10%, and clean 90%
-        split2 = int(0.1 * len(ids_q))
+        split2 = int(0.2 * len(ids_q))
         ids_p = ids_q[:split2]
         ids_cln = ids_q[split2:]
         split3 = int(0.2*len(ids_q))

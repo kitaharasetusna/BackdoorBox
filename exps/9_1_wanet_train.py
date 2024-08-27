@@ -25,7 +25,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/WaNet' 
 label_backdoor = 6
-bs_tr = 128; epoch_WaNet = 40; lr_WaNet = 1e-5
+bs_tr = 128; epoch_WaNet = 20; lr_WaNet = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -39,7 +39,7 @@ criterion = nn.CrossEntropyLoss()
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln, ids_noise = utils_data.prepare_CIFAR10_datasets_3(foloder=exp_dir,
-                                load=True)
+                                load=False)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}, noise: {len(ids_noise)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
@@ -81,7 +81,8 @@ if train_model:
             # perform a single optimization step
             optimizer.step()
         print(f'epoch: {epoch_+1}')
-        if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_WaNet-1:
+        # if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_WaNet-1:
+        if True:
             model.eval()
             # TODO: add test WaNet asr acc
             ACC_, ASR_ = utils_attack.test_asr_acc_wanet(dl_te=dl_te, model=model,
