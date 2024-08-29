@@ -67,10 +67,11 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/ISSBA' 
-secret_size = 20; label_backdoor = 6 
-bs_tr = 128
-epoch_B = 10; lr_B = 1e-4; lr_ft = 1e-4
+exp_dir = '../experiments/exp6_FI_B/WaNet' 
+label_backdoor = 6
+bs_tr = 128; epoch_WaNet = 20; lr_WaNet = 1e-4
+lr_B = 1e-4;epoch_B = 30 
+lr_ft = 1e-4
 lr_root = 1e-4; epoch_root = 30 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -129,10 +130,8 @@ print(TP/(TP+FP))
 # ----------------------------------------- 1 train B_theta  
 
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10ISSBA_whole(ds_tr, ids_p, label_backdoor, secret, encoder_issba, device)
-
-
-B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
+ds_whole_poisoned = utils_attack.CustomCIFAR10WaNet_whole(ds_tr, ids_p, label_backdoor,
+                                                           identity_grid=identity_grid, noise_grid=noise_grid)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
 # TODO: change this
@@ -140,20 +139,11 @@ ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
-optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-
-# pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
-# B_theta.load_state_dict(torch.load(pth_path))
-# B_theta.eval()
-# B_theta.requires_grad_(False) 
-
 
 # -------------------------------------------- train backdoor using B theta on a clean model
 model_root = core.models.ResNet(18); model_root = model_root.to(device)
 criterion = nn.CrossEntropyLoss(); optimizer = torch.optim.Adam(model.parameters(), lr=lr_root)
 
-# utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model_root, label_backdoor=label_backdoor,
-#                                         secret=secret, encoder=encoder_issba, device=device)
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 
 model.train(); model.requires_grad_(True)
