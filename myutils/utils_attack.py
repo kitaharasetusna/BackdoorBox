@@ -780,7 +780,7 @@ def fine_tune_Wanet2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, l
 
 # --------------------------------------------------------- Blended --------------------------------------------------------------
 class CustomCIFAR10Blended(torch.utils.data.Dataset):
-    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, pattern, alpha=0.2):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, pattern, alpha=0.5):
         self.original_dataset = Subset(original_dataset, subset_indices)
         self.trigger_indices = set(trigger_indices)
         self.bd_label = label_bd
