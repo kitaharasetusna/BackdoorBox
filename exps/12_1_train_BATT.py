@@ -30,7 +30,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 2 configs  ------------------------------------------
 exp_dir = '../experiments/exp6_FI_B/BATT' 
 label_backdoor = 6
-bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-4
+bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
@@ -39,6 +39,7 @@ device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr_BATT)
+scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5,10,15], gamma=0.1)
 criterion = nn.CrossEntropyLoss()
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
@@ -72,6 +73,7 @@ for epoch_ in range(epoch_BATT):
         loss.backward()
         # perform a single optimization step
         optimizer.step()
+    scheduler2.step()
     print(f'epoch: {epoch_+1}')
     # if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_Blended-1:
     if True:

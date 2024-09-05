@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms import Compose
 from torchvision import transforms
 from PIL import Image
 from torch.utils.data import Subset
@@ -978,7 +979,10 @@ class CustomCIFAR10BATT(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         original_idx = self.original_dataset.indices[idx]  # Get the original index
         image, label = self.original_dataset.dataset[original_idx]
-        
+        transform1 = Compose([
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                (0.247, 0.243, 0.261))
+        ])
         if original_idx in self.trigger_indices:
             # TODO: change this to BATT
             image = add_batt_trigger(inputs=image, rotation=self.rotation) 
