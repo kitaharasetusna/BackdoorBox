@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
 from torch.utils.data import Subset
 import pickle
 import numpy as np
@@ -178,6 +180,53 @@ class Encoder_mask(nn.Module):
         x = torch.sigmoid(self.conv2(x))
         return x
 
+class FixedSTN(nn.Module):
+    def __init__(self, input_channels=3):
+        super(FixedSTN, self).__init__()
+        
+        # Initialize the affine transformation matrix as learnable parameters
+        # Here we initialize the matrix to an identity matrix, but it should be a 2x3 matrix
+        self.affine_matrix = nn.Parameter(torch.tensor([[1.0, 0.0, 0.0],
+                                                       [0.0, 1.0, 0.0]], dtype=torch.float32).unsqueeze(0))  # shape: [1, 2, 3]
+    
+    def forward(self, x):
+        # Get batch size
+        batch_size = x.size(0)
+        
+        # Expand the affine_matrix to match the batch size
+        affine_matrix_expanded = self.affine_matrix.expand(batch_size, -1, -1) # [8, 2, 3]
+        
+        # Generate affine grid using the expanded transformation matrix
+        grid = F.affine_grid(affine_matrix_expanded, x.size(), align_corners=False) # [8, 32, 32, 2]
+        
+        # Apply the affine transformation to the input
+        x_transformed = F.grid_sample(x, grid, align_corners=False) # [8, 3, 32, 32]
+        
+        return x_transformed
+
+class EncoderWithFixedTransformation(nn.Module):
+    def __init__(self, input_channels=3):
+        super(EncoderWithFixedTransformation, self).__init__()
+        
+        # Fixed Spatial Transformer Network for learning transformations
+        self.fixed_stn = FixedSTN(input_channels)
+        
+        # Encoder network: keeps the output shape the same as the input shape (32x32)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),  # Padding to preserve spatial size
+            nn.ReLU(True),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),  # Padding to keep size (32, 32)
+            nn.ReLU(True),
+            nn.Conv2d(32, input_channels, kernel_size=3, padding=1),  # Final layer output back to 3 channels
+            nn.ReLU(True)
+        )
+    
+    def forward(self, x):
+        # Apply the learned fixed transformation using STN
+        x_transformed = self.fixed_stn(x)
+        # Pass the transformed input through the encoder
+        x_encoded = self.encoder(x_transformed)
+        return x_encoded
 
 def create_mask():
     mask = torch.ones((3, 32, 32), dtype=torch.float32)
@@ -895,3 +944,75 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
                             label_backdoor=label_backdoor, pattern=pattern, device=device)
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
+
+
+# --------------------------------------------------------- BATT --------------------------------------------------------------
+def add_batt_trigger(inputs, rotation):
+    # Convert tensor to PIL image for rotation
+    img_pil = transforms.ToPILImage()(inputs)
+    # Rotate the PIL image
+    img_pil = img_pil.rotate(rotation)
+    # Convert back to tensor
+    inputs = transforms.ToTensor()(img_pil) 
+    return inputs
+
+def add_random_batt_trigger(inputs):
+    # Convert tensor to PIL image for rotation
+    img_pil = transforms.ToPILImage()(inputs)
+    # Rotate the PIL image
+    img_pil = transforms.RandomAffine(degrees=10)(img_pil)
+    # Convert back to tensor
+    img_tensor = transforms.ToTensor()(img_pil) 
+    return inputs
+
+class CustomCIFAR10BATT(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, roation):
+        self.original_dataset = Subset(original_dataset, subset_indices)
+        self.trigger_indices = set(trigger_indices)
+        self.bd_label = label_bd
+        self.rotation = roation
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_idx = self.original_dataset.indices[idx]  # Get the original index
+        image, label = self.original_dataset.dataset[original_idx]
+        
+        if original_idx in self.trigger_indices:
+            # TODO: change this to BATT
+            image = add_batt_trigger(inputs=image, rotation=self.rotation) 
+            #add_badnet_trigger(inputs=image, triggerY=self.triggerY, triggerX=self.triggerX) 
+            label = self.bd_label
+        else:
+            image = add_random_batt_trigger(inputs=image)
+        return image, label
+
+
+def test_asr_acc_batt(dl_te, model, label_backdoor, rotation, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    inputs_bd[xx] = add_batt_trigger(inputs=inputs_bd[xx], rotation=rotation)
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+    return ACC, ASR
+
