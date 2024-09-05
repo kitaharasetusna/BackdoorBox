@@ -76,7 +76,7 @@ exp_dir = '../experiments/exp6_FI_B/Blended2'
 secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
-lr_B = 1e-4;epoch_B = 30 
+lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -85,7 +85,7 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_60.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_65.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -178,10 +178,10 @@ if train_B:
             # lpips_loss_op = loss_fn_alex(X_root, B_root)
             # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
             # loss = 20*los_mse + loss_wass
-            if epoch_<=20:
-                loss = los_logits
-            else:
-                loss = los_logits+los_mse
+            # if epoch_<=20:
+            #     loss = los_logits
+            # else:
+            loss = los_logits+los_mse
           
             loss.backward()
             optimizer.step()
@@ -195,7 +195,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{20}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{90}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 

@@ -68,7 +68,7 @@ torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/Blended' 
+exp_dir = '../experiments/exp6_FI_B/Blended2' 
 secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
@@ -82,7 +82,7 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_20.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_65.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
