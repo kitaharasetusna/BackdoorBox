@@ -216,10 +216,7 @@ class EncoderWithFixedTransformation(nn.Module):
         self.encoder = nn.Sequential(
             nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),  # Padding to preserve spatial size
             nn.ReLU(True),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),  # Padding to keep size (32, 32)
-            nn.ReLU(True),
-            nn.Conv2d(32, input_channels, kernel_size=3, padding=1),  # Final layer output back to 3 channels
-            nn.ReLU(True)
+            nn.Conv2d(16, input_channels, kernel_size=3, padding=1),  # Final layer output back to 3 channels
         )
     
     def forward(self, x):
