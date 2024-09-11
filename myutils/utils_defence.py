@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 def compute_fisher_information(model, images, labels, criterion, device='cpu', mode='sum', loss_=False):
@@ -145,3 +146,26 @@ def wasserstein_distance(A, B):
     # Compute the Wasserstein distance
     wasserstein_dist = torch.mean(dist)
     return wasserstein_dist
+
+class AT(nn.Module):
+	'''
+	Paying More Attention to Attention: Improving the Performance of Convolutional
+	Neural Netkworks via Attention Transfer
+	https://arxiv.org/pdf/1612.03928.pdf
+	'''
+	def __init__(self, p):
+		super(AT, self).__init__()
+		self.p = p
+
+	def forward(self, fm_s, fm_t):
+		loss = F.mse_loss(self.attention_map(fm_s), self.attention_map(fm_t))
+
+		return loss
+
+	def attention_map(self, fm, eps=1e-6):
+		am = torch.pow(torch.abs(fm), self.p)
+		am = torch.sum(am, dim=1, keepdim=True)
+		norm = torch.norm(am, dim=(2,3), keepdim=True)
+		am = torch.div(am, norm+eps)
+
+		return am
