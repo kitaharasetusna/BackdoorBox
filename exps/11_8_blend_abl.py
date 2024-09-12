@@ -19,18 +19,6 @@ from myutils import utils_data, utils_attack, utils_defence
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 
-def comp_inf_norm(A, B):
-    infinity_norm = torch.max(torch.abs(A - B))
-    return infinity_norm
-
-# Helper function to reset iterator if needed
-def get_next_batch(loader_iter, loader):
-    try:
-        return next(loader_iter)
-    except StopIteration:
-        return next(iter(loader))
-
-
 # ----------------------------------------- 0.0 fix seed
 # Set the seed for NumPy
 np.random.seed(42)
@@ -38,9 +26,10 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/Badnet_abl' 
-secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
-bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
+exp_dir = '../experiments/exp6_FI_B/Blended2' 
+secret_size = 20; label_backdoor = 6
+bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
+idx_blend = 656
 lr_B = 1e-4;epoch_B = 10 
 lr_ft = 8e-6
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
@@ -50,45 +39,67 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_20.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_65.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
 model.requires_grad_(False)
 
 
-# ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
                                 load=True)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-ds_questioned = utils_attack.CustomCIFAR10Badnet(
-    ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
-# dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-#     num_workers=0,drop_last=False,
-# )
+# ----------------------------------------- train model with ISSBA encoder
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 
-ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
-                        device=device)  
+pattern, _ = ds_te[idx_blend] #(3, 32, 32)
+
+ds_questioned = utils_attack.CustomCIFAR10Blended(original_dataset=ds_tr, subset_indices=ids_q,
+                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern)
+dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
+    num_workers=0,drop_last=False,
+)
+
+ds_x_q2 = Subset(ds_tr, ids_q)
+dl_x_q2 = DataLoader(
+    dataset= ds_x_q2,
+    batch_size=bs_tr,
+    shuffle=True,
+    num_workers=0,
+    drop_last=False,
+)
 
 
+ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
+                            label_backdoor=label_backdoor, pattern=pattern, device=device)
+
+print(ACC_, ASR_)
+with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+    idx_sus = pickle.load(f)
+TP, FP = 0.0, 0.0
+for s in idx_sus:
+    if s in ids_p:
+        TP+=1
+    else:
+        FP+=1
+print(TP/(TP+FP))
 # ----------------------------------------- 1 train B_theta  
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_backdoor,
-                                                           triggerX=triggerX, triggerY=triggerY)
+# TODO: change this to blended_whole
+ds_whole_poisoned = utils_attack.CustomCIFAR10Blended_whole(ds_tr, ids_p, label_backdoor,
+                    pattern=pattern)
 
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
-# TODO: change this
-dl_sus = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+ds_sus = Subset(ds_whole_poisoned, idx_sus)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
@@ -121,7 +132,9 @@ if train_B:
             # lpips_loss_op = loss_fn_alex(X_root, B_root)
             # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
             # loss = 20*los_mse + loss_wass
-            
+            # if epoch_<=20:
+            #     loss = los_logits
+            # else:
             loss = los_logits+los_mse
           
             loss.backward()
@@ -134,9 +147,9 @@ if train_B:
         if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
             utils_attack.test_asr_acc_ISSBA_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                 B=B_theta, device=device)
-            torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_abl_{epoch_+1}.pth')
+            torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_abl_{1}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{90}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -148,19 +161,19 @@ else:
             image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
-            encoded_image = utils_attack.add_badnet_trigger(image_c, triggerY=triggerY, triggerX=triggerX) 
+            encoded_image = utils_attack.add_blended_trigger(inputs=image_c, pattern=pattern, alpha=0.2)
             tensor_badnet = copy.deepcopy(encoded_image).to(device)
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
-            plt.savefig(exp_dir+f'/badnet_{index}.pdf')
+            plt.savefig(exp_dir+f'/Blended_{index}.pdf')
 
             encoded_image = B_theta(image)
             tensor_gen = copy.deepcopy(encoded_image).to(device)
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
-            plt.savefig(exp_dir+f'/generated_{index}.pdf')
+            plt.savefig(exp_dir+f'/Gen_{index}.pdf') 
 
             norm_ori_bad = comp_inf_norm(tensor_ori, tensor_badnet)
             norm_ori_gen = comp_inf_norm(tensor_ori, tensor_gen)
@@ -174,8 +187,8 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_Badnet2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
-                                B=B_theta, device=device, dl_te=dl_te, triggerX=triggerX, triggerY=triggerY,
+    utils_attack.fine_tune_Blended2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+                                B=B_theta, device=device, dl_te=dl_te, pattern=pattern, 
                                 epoch=10, optimizer=optimizer, criterion=criterion,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
 

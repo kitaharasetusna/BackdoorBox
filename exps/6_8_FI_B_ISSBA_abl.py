@@ -126,7 +126,7 @@ if train_B:
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_abl_{epoch_+1}.pth')
 else:
     pth_path = exp_dir+'/'+f'B_theta_abl_{1}.pth'
-    B_theta.load_state_dict(torch.load(pth_path))
+    # B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
     for index in [100, 200, 300, 400, 500, 600]:
