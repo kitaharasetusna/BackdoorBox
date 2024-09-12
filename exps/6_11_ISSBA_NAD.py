@@ -70,7 +70,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/ISSBA' 
 secret_size = 20; label_backdoor = 6 
 bs_tr = 128
-epoch_teacher = 20; lr_teacher = 1e-3 
+epoch_teacher = 10; lr_teacher = 1e-4 
 epoch_NAD = 25; lr_NAD = 1e-4; power = 2.0
 target_layers=['layer2', 'layer3', 'layer4']
 beta=[500, 500, 500]
