@@ -65,6 +65,7 @@ dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
 train_model = True
+model.load_state_dict(torch.load(exp_dir+'/step1_wanet_79.pth'))
 if train_model:
     model.train()
     ACC = []; ASR= []
@@ -84,7 +85,6 @@ if train_model:
         # if (epoch_+1)%5==0 or epoch_==0 or epoch_==epoch_WaNet-1:
         if True:
             model.eval()
-            # TODO: add test WaNet asr acc
             ACC_, ASR_ = utils_attack.test_asr_acc_wanet(dl_te=dl_te, model=model,
                             label_backdoor=label_backdoor,identity_grid=identity_grid, 
                             noise_grid=noise_grid, device=device) 
