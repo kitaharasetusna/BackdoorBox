@@ -43,7 +43,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
 lr_B = 1e-3;epoch_B = 100 
-lr_ft = 3e-5
+lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -140,7 +140,7 @@ if train_B:
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
     pth_path = exp_dir+'/'+f'B_theta_{1}.pth'
-    B_theta.load_state_dict(torch.load(pth_path))
+    # B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
     for index in [100, 200, 300, 400, 500, 600]:

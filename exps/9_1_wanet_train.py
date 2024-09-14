@@ -25,7 +25,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/WaNet' 
 label_backdoor = 6
-bs_tr = 128; epoch_WaNet = 20; lr_WaNet = 1e-4
+bs_tr = 128; epoch_WaNet = 200; lr_WaNet = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -60,7 +60,7 @@ else:
 print(identity_grid.shape, noise_grid.shape)
     
 ds_questioned = utils_attack.CustomCIFAR10WaNet(
-    ds_tr, ids_q, ids_p, noise_ids=ids_noise, label_bd=label_backdoor, identity_grid=identity_grid, noise_grid=noise_grid)
+    ds_tr, ids_q+ids_root, ids_p, noise_ids=ids_noise, label_bd=label_backdoor, identity_grid=identity_grid, noise_grid=noise_grid)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
@@ -89,7 +89,7 @@ if train_model:
                             label_backdoor=label_backdoor,identity_grid=identity_grid, 
                             noise_grid=noise_grid, device=device) 
             ACC.append(ACC_); ASR.append(ASR_)
-            torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')
+            torch.save(model.state_dict(), exp_dir+'/'+f'step1_wanet_{epoch_+1}.pth')
             with open(exp_dir+f'/step1_train_wanet.pkl', 'wb') as f:
                 pickle.dump({'ACC': ACC, 'ASR': ASR },f)
             model.train()

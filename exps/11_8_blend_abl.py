@@ -31,7 +31,7 @@ secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
 lr_B = 1e-4;epoch_B = 10 
-lr_ft = 8e-6
+lr_ft = 1e-3
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -149,8 +149,6 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{90}.pth'
-    B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
     for index in [100, 200, 300, 400, 500, 600]:
@@ -175,10 +173,7 @@ else:
             plt.imshow(issba_image)
             plt.savefig(exp_dir+f'/Gen_{index}.pdf') 
 
-            norm_ori_bad = comp_inf_norm(tensor_ori, tensor_badnet)
-            norm_ori_gen = comp_inf_norm(tensor_ori, tensor_gen)
-            norm_bad_gen = comp_inf_norm(tensor_gen, tensor_badnet)
-            print(f'ori-bad: {norm_ori_bad}, ori-gen: {norm_ori_gen}, gen-bad: {norm_bad_gen}')
+            
             
     for param in model.parameters():
         param.requires_grad = True 
