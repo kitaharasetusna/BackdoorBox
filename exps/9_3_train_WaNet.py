@@ -84,7 +84,7 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_17.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_wanet_198.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -192,7 +192,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{1}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
