@@ -80,7 +80,7 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_17.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_wanet_198.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
