@@ -67,7 +67,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/Badnet' 
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
-bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
+bs_tr = 128; epoch_Badnet = 300; lr_Badnet = 1e-4
 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
