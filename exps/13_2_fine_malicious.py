@@ -38,7 +38,7 @@ os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
 
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_25.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -75,7 +75,7 @@ dl_x_q2 = DataLoader(
 
 # ----------------------------------------- 1.2 pick up X suspicious
 from collections import defaultdict
-pick_upX = True 
+pick_upX = False 
 if pick_upX:
     data = defaultdict(int)
     print("start FI collecting")
@@ -99,7 +99,7 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, len(sorted_items) * 1 // 100)
+    top_10_percent_count = max(1, len(sorted_items) * 1 // 500)
     ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
     with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
         pickle.dump(ids_suspicious, f)
