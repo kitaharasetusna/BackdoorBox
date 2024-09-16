@@ -367,9 +367,14 @@ def prepare_CIFAR10_datasets_SIG(foloder, target_label, load=False, seed=42):
     '''
     torch.manual_seed(seed)
     transform_train = Compose([
+        transforms.Resize((32, 32)),
+        transforms.RandomCrop((32, 32), padding=5),
+        transforms.RandomRotation(10),
+        transforms.RandomHorizontalFlip(p=0.5),
         ToTensor(),
     ])
     transform_test = Compose([
+        transforms.Resize((32, 32)),
         ToTensor(),
     ])
     # trainset1 and testset1 are used for computing diversity loss

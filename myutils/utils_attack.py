@@ -1217,6 +1217,10 @@ class CustomCIFAR10SIG(torch.utils.data.Dataset):
 
 
 def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
+    transform1 = Compose([
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                (0.247, 0.243, 0.261))
+    ])
     model.eval()
     with torch.no_grad():
         bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
