@@ -1175,3 +1175,70 @@ def fine_tune_BATT2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, lo
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
 
+# -------------------------------------------------- SIG ATTACK ------------------------------------------
+def add_SIG_trigger(inputs, delta, frequency):
+    # # Convert tensor to PIL image for rotation
+    img = transforms.ToPILImage()(inputs*255)
+    img = np.float32(img)
+    pattern = np.zeros_like(img)
+    m = pattern.shape[1]
+    for i in range(int(img.shape[0])):
+            for j in range(int(img.shape[1])):
+                pattern[i, j, :] = delta * np.sin(2 * np.pi * j * frequency / m)
+
+    img = np.uint32(img) + pattern
+    img = np.uint8(np.clip(img, 0, 255))
+    img = Image.fromarray(img)
+    inputs = transforms.ToTensor()(img)
+    return inputs 
+
+class CustomCIFAR10SIG(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, delta, frequency):
+        self.original_dataset = Subset(original_dataset, subset_indices)
+        self.trigger_indices = set(trigger_indices)
+        self.bd_label = label_bd
+        self.delta = delta
+        self.frequency = frequency
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_idx = self.original_dataset.indices[idx]  # Get the original index
+        image, label = self.original_dataset.dataset[original_idx]
+        transform1 = Compose([
+            transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                (0.247, 0.243, 0.261))
+        ])
+        if original_idx in self.trigger_indices:
+            image = add_SIG_trigger(inputs=image, delta=self.delta, frequency=self.frequency)
+            label = self.bd_label
+        return image, label
+
+
+def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    inputs_bd[xx] = add_SIG_trigger(inputs=inputs_bd[xx], delta=delta, frequency=freq)
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+    return ACC, ASR
