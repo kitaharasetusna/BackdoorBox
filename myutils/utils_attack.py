@@ -1246,3 +1246,61 @@ def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
         ACC = 100.00 * float(cln_correct) / cln_num
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
     return ACC, ASR
+
+
+class CustomCIFAR10SIG_whole(torch.utils.data.Dataset):
+    def __init__(self, original_dataset, trigger_indices, label_bd, delta, freq):
+        self.original_dataset = original_dataset 
+        self.trigger_indices = set(trigger_indices)
+        self.bd_label = label_bd
+        self.delta = delta
+        self.frequency = freq 
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        image, label = self.original_dataset[idx]
+        if idx in self.trigger_indices:
+            image = add_SIG_trigger(inputs=image, delta=self.delta, frequency=self.frequency)
+            # add_batt_trigger(inputs=image, rotation=self.rotation)
+            label = self.bd_label
+        return image, label
+
+
+def fine_tune_SIG(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = add_BATT_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                        B=B, device=device) 
+            inputs = torch.cat((inputs_bd,X_root), dim=0)
+            targets = torch.cat((targets_bd, Y_root))
+            inputs, targets = inputs.to(device), targets.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            outputs2 = model(X_sus)
+            loss2 = -criterion(outputs2, Y_sus)
+            loss=loss1
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    freq=freq, delta=delta, device=device)
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
