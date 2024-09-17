@@ -42,7 +42,8 @@ exp_dir = '../experiments/exp6_FI_B/BATT'
 label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
-lr_B = 1e-3;epoch_B = 100 
+bs_tr2 = 32
+lr_B = 1e-2;epoch_B = 100 
 lr_ft = 1e-5
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -102,11 +103,13 @@ print(TP/(TP+FP))
 ds_whole_poisoned = utils_attack.CustomCIFAR10BATT_whole(original_dataset=ds_tr,
                     trigger_indices=ids_p, label_bd=label_backdoor, rotation=rotation)
 
-B_theta = utils_attack.EncoderWithFixedTransformation(input_channels=3); B_theta= B_theta.to(device)
+# B_theta = utils_attack.EncoderWithFixedTransformation(input_channels=3, device=device); 
+B_theta = utils_attack.FixedSTN(input_channels=3, device=device)
+B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
@@ -150,7 +153,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{55}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{5}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 

@@ -182,35 +182,46 @@ class Encoder_mask(nn.Module):
         return x
 
 class FixedSTN(nn.Module):
-    def __init__(self, input_channels=3):
+    def __init__(self, input_channels=3, device=None):
         super(FixedSTN, self).__init__()
         
         # Initialize the affine transformation matrix as learnable parameters
         # Here we initialize the matrix to an identity matrix, but it should be a 2x3 matrix
-        self.affine_matrix = nn.Parameter(torch.tensor([[1.0, 0.0, 0.0],
-                                                       [0.0, 1.0, 0.0]], dtype=torch.float32).unsqueeze(0))  # shape: [1, 2, 3]
+        # self.affine_matrix = nn.Parameter(torch.tensor([[1.0, 0.0, 0.0],
+        #                                                [0.0, 1.0, 0.0]], dtype=torch.float32).unsqueeze(0))  # shape: [1, 2, 3]
+        self.theta = nn.Parameter(torch.zeros(1))  # Start with 0 radians (no rotation)
+        self.device = device
+
     
     def forward(self, x):
         # Get batch size
         batch_size = x.size(0)
         
-        # Expand the affine_matrix to match the batch size
-        affine_matrix_expanded = self.affine_matrix.expand(batch_size, -1, -1) # [8, 2, 3]
+        # # Expand the affine_matrix to match the batch size
+        # affine_matrix_expanded = self.affine_matrix.expand(batch_size, -1, -1) # [8, 2, 3]
         
-        # Generate affine grid using the expanded transformation matrix
-        grid = F.affine_grid(affine_matrix_expanded, x.size(), align_corners=False) # [8, 32, 32, 2]
+        # # Generate affine grid using the expanded transformation matrix
+        # grid = F.affine_grid(affine_matrix_expanded, x.size(), align_corners=False) # [8, 32, 32, 2]
         
-        # Apply the affine transformation to the input
-        x_transformed = F.grid_sample(x, grid, align_corners=False) # [8, 3, 32, 32]
-        
+        # # Apply the affine transformation to the input
+        # x_transformed = F.grid_sample(x, grid, align_corners=False) # [8, 3, 32, 32]
+        rotation_matrix = torch.zeros(x.size(0), 2, 3).to(self.device)
+        rotation_matrix[:, 0, 0] = torch.cos(self.theta)
+        rotation_matrix[:, 0, 1] = -torch.sin(self.theta)
+        rotation_matrix[:, 1, 0] = torch.sin(self.theta)
+        rotation_matrix[:, 1, 1] = torch.cos(self.theta)
+        grid = F.affine_grid(rotation_matrix, x.size())
+        x_transformed = F.grid_sample(x, grid)
+
         return x_transformed
 
 class EncoderWithFixedTransformation(nn.Module):
-    def __init__(self, input_channels=3):
+    def __init__(self, input_channels=3, device=None):
         super(EncoderWithFixedTransformation, self).__init__()
         
         # Fixed Spatial Transformer Network for learning transformations
-        self.fixed_stn = FixedSTN(input_channels)
+        self.fixed_stn = FixedSTN(input_channels, device)
+        self.device = device
         
         # Encoder network: keeps the output shape the same as the input shape (32x32)
         self.encoder = nn.Sequential(
@@ -224,7 +235,7 @@ class EncoderWithFixedTransformation(nn.Module):
         x_transformed = self.fixed_stn(x)
         # Pass the transformed input through the encoder
         x_encoded = self.encoder(x_transformed)
-        return x_encoded
+        return x_transformed, x_encoded 
 
 def create_mask():
     mask = torch.ones((3, 32, 32), dtype=torch.float32)
@@ -521,7 +532,8 @@ def fine_tune_Badnet2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
             loss1 = criterion(outputs, targets)
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
-            loss=loss1+0.5*loss2
+            # loss=loss1+0.5*loss2
+            loss=loss1
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
@@ -930,7 +942,8 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
             loss1 = criterion(outputs, targets)
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
-            loss=loss1+0.5*loss2
+            loss=loss1
+            # loss=loss1+0.5*loss2
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
@@ -1126,7 +1139,7 @@ def fine_tune_BATT(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loa
             loss1 = criterion(outputs, targets)
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
-            loss=loss1+0.5*loss2
+            loss=loss1
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
