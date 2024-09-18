@@ -75,6 +75,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/Blended2' 
 secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
+bs_tr2 = 50
 idx_blend = 656
 lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-4
@@ -143,14 +144,14 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10Blended_whole(ds_tr, ids_p, label_
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 
-train_B = False 
+train_B = True 
 
 def relu_(x, threshold=0.5):
     if x>threshold:

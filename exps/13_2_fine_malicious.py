@@ -85,7 +85,11 @@ if pick_upX:
         loss = utils_defence.compute_loss(model=model, images=image, labels=label,
                                           criterion=criterion, device=device) 
         idx_ori = ds_questioned.original_dataset.indices[i]
-        print(idx_ori, 0, loss)
+        if idx_ori in ids_p:
+            tag = 'poison'
+        else:
+            tag = 'clean'
+        print(idx_ori, tag, loss)
         data[idx_ori] = (0, loss)
     print("finish FI collecting")
     with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'wb') as f:
@@ -99,7 +103,7 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, int(len(sorted_items) * 1 // 300))
+    top_10_percent_count = max(1, int(len(sorted_items) * 1 // 500))
     ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
     with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
         pickle.dump(ids_suspicious, f)

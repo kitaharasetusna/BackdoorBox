@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import sys
 import pickle
+import numpy as np
 sys.path.append('..')
 from myutils import utils_data
 # ----------------------------------------- 0.1 configs:
@@ -44,8 +45,12 @@ weights_mali = [0.5 / len(loss_mali)] * len(loss_mali)
 # Create histogram for both datasets with normalized counts
 
 # Plot histograms
-plt.hist(loss_clean, bins=50,  alpha=0.5, label='clean', color='blue')
-plt.hist(loss_mali, bins=50,  alpha=0.5, label='mali', color='red')
+bins = np.concatenate([np.linspace(np.min(loss_mali), 2.0, 800), np.linspace(2.0, np.max(loss_mali), 100)])
+bins_clean = np.concatenate([np.linspace(np.min(loss_clean), 2.0, 800), np.linspace(2.0, np.max(loss_clean), 500)])
+
+plt.hist(loss_clean, bins=1000,  alpha=0.5, label='clean', color='blue')
+plt.hist(loss_mali, bins=1000,  alpha=0.5, label='mali', color='red')
+plt.xlim(-1, 6)  # Constrain the x-axis between 0 and 6
 
 # Add labels and title
 plt.xlabel('Loss Value')

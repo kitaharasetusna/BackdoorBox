@@ -30,7 +30,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 2 configs  ------------------------------------------
 exp_dir = '../experiments/exp6_FI_B/SIG' 
 label_backdoor = 6
-bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-4
+bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 sig_delta = 40; sig_f = 6
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results

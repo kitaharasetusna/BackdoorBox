@@ -75,6 +75,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/Badnet' 
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
+bs_tr2 = 50 
 lr_B = 1e-4;epoch_B = 50 
 lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
@@ -129,14 +130,14 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_b
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 # TODO: change this
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-
+print(len(ds_sus), len(ds_x_root))
 train_B = False 
 
 def relu_(x, threshold=0.5):

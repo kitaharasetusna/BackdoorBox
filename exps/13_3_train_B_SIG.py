@@ -41,7 +41,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/SIG' 
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-4
-bs_tr2 = 32
+bs_tr2 = 50 
 sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-4
@@ -111,7 +111,6 @@ ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-
 train_B = False 
 
 def relu_(x, threshold=0.5):
@@ -137,7 +136,7 @@ if train_B:
             logits_root = model(B_root); logits_q = model(X_q)
             los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
             los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
-            loss = los_logits+los_mse
+            loss = los_logits+5*los_mse
           
             loss.backward()
             optimizer.step()
