@@ -136,7 +136,7 @@ if train_B:
             logits_root = model(B_root); logits_q = model(X_q)
             los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
             los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
-            loss = los_logits+5*los_mse
+            loss = los_logits+10*los_mse
           
             loss.backward()
             optimizer.step()
@@ -150,7 +150,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{20}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
