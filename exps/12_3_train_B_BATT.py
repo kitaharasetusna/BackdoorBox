@@ -44,7 +44,7 @@ bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
 bs_tr2 = 32
 lr_B = 1e-2;epoch_B = 100 
-lr_ft = 1e-5
+lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
