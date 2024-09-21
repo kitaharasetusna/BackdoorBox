@@ -142,9 +142,9 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, len(sorted_items) * 1 // 100)
+    top_10_percent_count = max(1, len(sorted_items) * 1 //500)
     ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
-    with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
+    with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
         pickle.dump(ids_suspicious, f)
     TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
     for s in ids_suspicious:
