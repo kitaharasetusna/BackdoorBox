@@ -30,7 +30,7 @@ torch.manual_seed(42)
 # ----------------------------------------- 2 configs  ------------------------------------------
 exp_dir = '../experiments/exp6_FI_B/BATT' 
 label_backdoor = 6
-bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
+bs_tr = 128; epoch_BATT = 100; lr_BATT = 3e-3
 rotation = 16 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results

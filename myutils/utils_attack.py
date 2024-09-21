@@ -532,7 +532,7 @@ def fine_tune_Badnet2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
             loss1 = criterion(outputs, targets)
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
-            loss=loss1+0.005*loss2
+            loss=loss1+0.05*loss2
             # loss=loss1
             # do a backwards pass
             loss.backward()
@@ -1139,7 +1139,7 @@ def fine_tune_BATT(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loa
             loss1 = criterion(outputs, targets)
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
-            loss=loss1
+            loss=loss1+0.002*loss2
             # do a backwards pass
             loss.backward()
             # perform a single optimization step

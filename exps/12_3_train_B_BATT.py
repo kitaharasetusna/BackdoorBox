@@ -88,7 +88,7 @@ ACC_, ASR_ = utils_attack.test_asr_acc_batt(dl_te=dl_te, model=model, label_back
                                                     rotation=rotation, device=device)
 
 print(ACC_, ASR_)
-with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
 TP, FP = 0.0, 0.0
 for s in idx_sus:
