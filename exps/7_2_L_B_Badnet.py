@@ -152,4 +152,4 @@ else:
     TN = len(ds_questioned)-FP
     F1 = 2*TP/(2*TP+FP+FN)
     precision = TP/(TP+FP)
-    print(F1, precision)
+    print(F1, precision, TP, FP)

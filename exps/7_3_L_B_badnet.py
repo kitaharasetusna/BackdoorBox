@@ -112,7 +112,7 @@ ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device)  
 
-with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
 TP, FP = 0.0, 0.0
 for s in idx_sus:
@@ -147,8 +147,6 @@ def relu_(x, threshold=0.5):
         return torch.tensor(0.0)
 
 if train_B:
-    pth_path = exp_dir+'/'+f'B_theta_{50}.pth'
-    B_theta.load_state_dict(torch.load(pth_path))
     loss_fn_alex = lpips.LPIPS(net='alex').cuda()
     for epoch_ in range(epoch_B):
         loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
@@ -183,7 +181,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{45}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{50}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
