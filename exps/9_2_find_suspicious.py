@@ -90,7 +90,7 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-load_grid = True 
+load_grid = False 
 if not load_grid:
     identity_grid,noise_grid=utils_attack.gen_grid(32,4)
     torch.save(identity_grid, exp_dir+'/step1_ResNet-18_CIFAR-10_WaNet_identity_grid.pth')
@@ -151,9 +151,10 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, len(sorted_items) * 1 // 100)
+    top_10_percent_count = max(1, len(sorted_items) * 1 // 500)
+    print(top_10_percent_count)
     ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
-    with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
+    with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
         pickle.dump(ids_suspicious, f)
     TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
     for s in ids_suspicious:

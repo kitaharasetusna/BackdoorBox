@@ -1,9 +1,9 @@
 import re
 import csv
 
-exp_dir = '../experiments/exp6_FI_B/BATT' 
+exp_dir = '../experiments/exp6_FI_B/WaNet' 
 # csv_file = '/ABL_BATT'
-csv_file = '/B2B_BATT'
+csv_file = '/B2B_WaNet'
 txt_file = exp_dir+csv_file+'.txt'
 
 

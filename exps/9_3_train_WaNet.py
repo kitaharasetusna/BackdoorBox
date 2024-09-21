@@ -75,6 +75,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/WaNet' 
 label_backdoor = 6
 bs_tr = 128; epoch_WaNet = 20; lr_WaNet = 1e-4
+bs_tr2 = 50
 lr_B = 1e-4;epoch_B = 30 
 lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
@@ -122,7 +123,7 @@ ACC_, ASR_ = utils_attack.test_asr_acc_wanet(dl_te=dl_te, model=model,
                             label_backdoor=label_backdoor,identity_grid=identity_grid, 
                             noise_grid=noise_grid, device=device) 
 print(ACC_, ASR_)
-with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
 TP, FP = 0.0, 0.0
 for s in idx_sus:
@@ -139,10 +140,10 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10WaNet_whole(ds_tr, ids_p, label_ba
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 # TODO: change this
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
