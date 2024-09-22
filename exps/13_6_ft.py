@@ -23,9 +23,8 @@ def get_next_batch(loader_iter, loader):
     try:
         return next(loader_iter)
     except StopIteration:
-        # Reinitialize the iterator when it's exhausted
-        loader_iter = iter(loader)
-        return next(loader_iter)
+        return next(iter(loader))
+
 
 def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, device):
     ''' get FIM while training on training data
@@ -68,14 +67,12 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-# ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/SIG' 
 label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 sig_delta = 40; sig_f = 6
-lr_B = 1e-3;epoch_B = 100 
-lr_ft = 1e-4
-lr_root = 1e-4; epoch_root = 20 
+lr_ft = 1e-5
+lr_root = 1e-4; epoch_root = 100 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -94,18 +91,19 @@ ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datas
                                 load=True, target_label=label_backdoor)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
-assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
+assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
+
 # ----------------------------------------- train model with ISSBA encoder
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
-# TODO: change this to SIG attack
 ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
                                                trigger_indices=ids_p, label_bd=label_backdoor,
                                                delta=sig_delta, frequency=sig_f)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
+
 ds_x_q2 = Subset(ds_tr, ids_q)
 dl_x_q2 = DataLoader(
     dataset= ds_x_q2,
@@ -120,7 +118,6 @@ ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
                                                    delta=sig_delta, freq=sig_f, device=device)
 
-
 print(ACC_, ASR_)
 with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
@@ -131,12 +128,12 @@ for s in idx_sus:
     else:
         FP+=1
 print(TP/(TP+FP))
+
 # ----------------------------------------- 1 train B_theta  
 # prepare B
 ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(original_dataset=ds_tr,
                     trigger_indices=ids_p, label_bd=label_backdoor, freq=sig_f,
                     delta=sig_delta)
-
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
@@ -152,20 +149,18 @@ loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus)
 
 model.train(); model.requires_grad_(True)
 ACC = []; ASR= []
-print(len(dl_root), len(dl_sus))
 for epoch_ in range(epoch_root):
-    for i in range(max(len(dl_root), len(dl_sus))):
-        X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
-        X_q, Y_q = get_next_batch(loader_sus_iter, dl_sus)
+    for  X_root, Y_root in dl_root:
+       
+       
         X_root, Y_root = X_root.to(device), Y_root.to(device)
-        X_q, Y_q= X_q.to(device), Y_q.to(device)
+        
         optimizer.zero_grad()
         # make a forward pass
         Y_root_pred = model(X_root)
-        Y_q_pred = model(X_q)
         # calculate the loss
 
-        loss = criterion(Y_root_pred, Y_root)-criterion(Y_q_pred, Y_q)
+        loss = criterion(Y_root_pred, Y_root)
         # do a backwards pass
         loss.backward()
         # perform a single optimization step
@@ -177,6 +172,6 @@ for epoch_ in range(epoch_root):
                                                    label_backdoor=label_backdoor,
                                                    delta=sig_delta, freq=sig_f, device=device) 
         ACC.append(ACC_); ASR.append(ASR_)
-        with open(exp_dir+f'/step5_ft_sus_cln.pkl', 'wb') as f:
+        with open(exp_dir+f'/step5_ft_cln.pkl', 'wb') as f:
             pickle.dump({'ACC': ACC, 'ASR': ASR },f)
         model.train()
