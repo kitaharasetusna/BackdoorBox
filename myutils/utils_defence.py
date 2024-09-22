@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from torchcam.methods import SmoothGradCAMpp, CAM, GradCAM, LayerCAM
+from torchcam.utils import overlay_mask
+import matplotlib.pyplot as plt
+from torchvision.transforms.functional import normalize, resize, to_pil_image
 
 def compute_fisher_information(model, images, labels, criterion, device='cpu', mode='sum', loss_=False):
     """
@@ -363,3 +367,50 @@ class Shared_PGD():
             pass
 
         return batch_pert.detach()
+
+def grad_cam(model, image_tensor, image, class_index=None, device=None, index = 0, title_="", exp_dir=""):
+    ''' return grad-cam
+        Get Grad-cam of the model given an image and visualize it using over-mask
+        
+        Args: 
+            model: a torch nn.Module instance, ususally used as a neural network
+            image_tensor: a torch tensor shaped as (C, H, W) that's been regularized
+            image: original image which is also a torch tensor 
+            class_index: int, the index of the class you want to extract
+            device: 'cpu' or 'cuda' 
+            iter_: int, used to name fig when training
+            index: index of the image in the dataset
+            title_: str, used to name the fig when infere
+        Returns:
+    '''
+    # Set your CAM extractor
+    # with SmoothGradCAMpp(model) as cam_extractor:
+    mdodel = model.eval()
+
+    # cam = GradCAM(model, 'layer4')
+    # scores = model(image_tensor.unsqueeze(0).to(config['device']))
+    # grad_cam = cam(class_idx=class_index, scores=scores)
+    # print(grad_cam); import sys; sys.exit()
+    
+    # with GradCAM(model, "layer3", input_shape=(3, 32, 32)) as cam_extractor:
+    with LayerCAM(model, ["layer4"], input_shape=(3, 32, 32)) as cam_extractor:
+        # Preprocess your data and feed it to the model
+        print(image_tensor.unsqueeze(0).shape)
+        out = model(image_tensor.unsqueeze(0).to(device)) #e.g. (3, 244, 244) -> (1, 3, 244, 244)
+        # Retrieve the CAM by passing the class index and the model output
+        # print(out.shape, out.squeeze(0))
+        probabilities = torch.softmax(out, dim=1)
+        predicted_label = torch.argmax(probabilities, dim=1).item()
+        print("Predicted label:", predicted_label)
+        if class_index == None:
+            activation_map = cam_extractor(out.squeeze(0).argmax().item(), out) # (1, 1000)->(1000)->(1: a list of B tensors)
+        else:
+            activation_map = cam_extractor(class_index, out)
+    # Visualize the raw CAM
+    plt.imshow(activation_map[0].squeeze(0).detach().cpu().numpy()); plt.axis('off'); plt.tight_layout()
+    result = overlay_mask(to_pil_image(image), to_pil_image(activation_map[0].squeeze(0).detach().cpu(), mode='F'), 
+                          alpha=0.3,
+                          colormap='viridis')
+    # Display it
+    plt.imshow(result); plt.axis('off'); plt.tight_layout()
+    plt.savefig(f'{exp_dir}/{title_}_index_{index}_predicted_{predicted_label}_gt_{class_index}.pdf')
