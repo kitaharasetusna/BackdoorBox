@@ -32,7 +32,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/Badnet'
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 256; epoch_Badnet = 300; lr_Badnet = 1e-4
 os.makedirs(exp_dir, exist_ok=True)
-
+get_smaller_idx = True 
 # -----------------------------------------3 dirs, load model
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -100,10 +100,18 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, int(len(sorted_items) * 1 // 100))
-    ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
-    with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
-        pickle.dump(ids_suspicious, f)
+    if not get_smaller_idx:
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 100))
+        ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
+        with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
+            pickle.dump(ids_suspicious, f)
+    else:
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 1000))
+        ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
+        with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
+            pickle.dump(ids_suspicious, f)
+    
+    
     TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
     for s in ids_suspicious:
         if s in ids_p:

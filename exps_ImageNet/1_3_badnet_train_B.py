@@ -80,6 +80,7 @@ bs_tr = 256; epoch_Badnet = 300; lr_Badnet = 1e-4
 bs_tr2 = 50 
 lr_B = 1e-4;epoch_B = 100 
 lr_ft = 1e-4
+train_B = False 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -120,8 +121,12 @@ ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device)  
 
-with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
-    idx_sus = pickle.load(f)
+if train_B:
+    with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+        idx_sus = pickle.load(f)
+else:
+    with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
+        idx_sus = pickle.load(f)
 TP, FP = 0.0, 0.0
 for s in idx_sus:
     if s in ids_p:
@@ -146,7 +151,7 @@ dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 print(len(ds_sus), len(ds_x_root))
-train_B =  True 
+
 
 def relu_(x, threshold=0.5):
     if x>threshold:
@@ -189,7 +194,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{100}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{15}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
