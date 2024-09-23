@@ -6,6 +6,7 @@ __pycache__/
 # data
 data/
 adv_dataset_old/
+exps_ImageNet/data/
 
 # experiments
 experiments/
@@ -22,4 +23,3 @@ mytest/
 ./experiments
 ./benign_CIFAR10/*
 
-exps_ImageNet/data/*
