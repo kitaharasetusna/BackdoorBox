@@ -2,6 +2,7 @@
 
 import sys
 import torch
+import torchvision
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
@@ -18,6 +19,7 @@ from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminat
 from myutils import utils_data, utils_attack, utils_defence
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset
+from torchvision import models
 
 def comp_inf_norm(A, B):
     infinity_norm = torch.max(torch.abs(A - B))
@@ -72,9 +74,9 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/Badnet' 
+exp_dir = '../experiments/exp7_TinyImageNet/Badnet' 
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
-bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
+bs_tr = 256; epoch_Badnet = 300; lr_Badnet = 1e-4
 bs_tr2 = 50 
 lr_B = 1e-4;epoch_B = 100 
 lr_ft = 1e-4
@@ -84,8 +86,14 @@ os.makedirs(exp_dir, exist_ok=True)
 
 device = torch.device("cuda:0")
 
-model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_20.pth'))
+device = torch.device("cuda:0")
+# Load a pretrained ResNet-18 model
+model = models.resnet18(pretrained=True)
+model = torchvision.models.get_model('resnet18', num_classes=200)
+model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
+model.maxpool = nn.Identity()
+model = model.to(device)
+model.load_state_dict(torch.load(exp_dir+f'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -93,11 +101,11 @@ model.requires_grad_(False)
 
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
-ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
-                                load=True)
+ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets(foloder=exp_dir,
+                                load=False)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
-assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
+assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
 
 ds_questioned = utils_attack.CustomCIFAR10Badnet(
     ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
@@ -181,7 +189,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{50}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{100}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
