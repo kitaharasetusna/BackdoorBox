@@ -22,4 +22,4 @@ mytest/
 ./experiments
 ./benign_CIFAR10/*
 
-./exps_ImageNet/data/*
+exps_ImageNet/data/*
