@@ -8,6 +8,7 @@ import hashlib
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+from myutils import tiny_imagenet_dataset
 
 def get_indices_hash(indices):
     indices_bytes = torch.tensor(indices).numpy().tobytes()
@@ -432,31 +433,27 @@ def prepare_ImageNet_datasets(foloder, load=False, seed=42):
             trainset, testset, ids_root, ids_q, ids_p, ids_cln
     '''
     torch.manual_seed(seed)
-    # Image transformations
-    transform_train = transforms.Compose([
-        transforms.RandomResizedCrop(64),
-        transforms.RandomHorizontalFlip(),
+    normalize = transforms.Normalize(mean=[0.4802, 0.4481, 0.3975],
+                                     std=[0.2302, 0.2265, 0.2262])
+    print("Loading training data")
+    train_transform = transforms.Compose([
+                transforms.RandomResizedCrop(64),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ])
+    ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)
+    print("Loading validation data")
+    val_transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        normalize,
     ])
-
-    transform_test = transforms.Compose([
-        transforms.RandomResizedCrop(64),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-    # Set dataset paths
-    dr_ds = '../datasets/'
-    train_dir = dr_ds+'tiny-imagenet-200/train'
-    val_dir = dr_ds+'tiny-imagenet-200/val'
-
-    # Load datasets
-    trainset = ImageFolder(train_dir, transform=transform_train)
-    testset = ImageFolder(val_dir, transform=transform_test)
+    ds_te = tiny_imagenet_dataset.TinyImageNet('../data', split='val', download=False, transform=val_transform)
+ 
     
     # ---------------------------------------------- st: Get the indices: (root 10%, q 90%->[10% p, 90% cln])
     if load==False:
-        num_train = len(trainset)
+        num_train = len(ds_tr)
         # Shuffle the indices
         torch.manual_seed(42)  # For reproducibility
         indices = torch.randperm(num_train).tolist()
@@ -481,5 +478,5 @@ def prepare_ImageNet_datasets(foloder, load=False, seed=42):
             ids_p = dict_ids['ids_p']; ids_cln = dict_ids['ids_cln']
     # ---------------------------------------------- ed: Get the indices
 
-    return trainset, testset, ids_root, ids_q, ids_p, ids_cln 
+    return ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln 
     
