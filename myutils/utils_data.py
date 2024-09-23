@@ -2,6 +2,7 @@ from torchvision.transforms import Compose, ToTensor
 from torchvision import transforms
 from torchvision.datasets import DatasetFolder, CIFAR10
 from torch.utils.data import random_split
+from torchvision.datasets import ImageFolder
 import torch
 import hashlib
 import numpy as np
@@ -399,7 +400,7 @@ def prepare_CIFAR10_datasets_SIG(foloder, target_label, load=False, seed=42):
         indices = torch.randperm(num_train).tolist()
 
         # Split indices into two subsets: 10% and 90%
-        split = int(0.1 * num_train)
+        split = int(0.05 * num_train)
         ids_root = indices[:split]
         ids_q = indices[split:]
 
@@ -408,6 +409,68 @@ def prepare_CIFAR10_datasets_SIG(foloder, target_label, load=False, seed=42):
         num_samples = int(0.1 * len(target_indices))
         ids_p = np.random.choice(target_indices, num_samples, replace=False)
         ids_cln = [idx for idx in ids_q if idx not in ids_p] 
+        
+        with open(foloder+'/cifar10_indices.pkl', 'wb') as f:
+            pickle.dump({'ids_root': ids_root, 'ids_q': ids_q, 'ids_p': ids_p, 'ids_cln': ids_cln}, f)
+    else:
+        with open(foloder+'/cifar10_indices.pkl', 'rb') as f:
+            dict_ids = pickle.load(f)
+            ids_root = dict_ids['ids_root']; ids_q = dict_ids['ids_q']
+            ids_p = dict_ids['ids_p']; ids_cln = dict_ids['ids_cln']
+    # ---------------------------------------------- ed: Get the indices
+
+    return trainset, testset, ids_root, ids_q, ids_p, ids_cln 
+
+
+# --------------------------------- TinyImagement -------------------------------------------------
+def prepare_ImageNet_datasets(foloder, load=False, seed=42):
+    ''' collect randomly 10% data as secure data
+        params: 
+            seed: ensure that [random split] return the same split of 
+            clean and questioned every time you call this function
+        return:
+            trainset, testset, ids_root, ids_q, ids_p, ids_cln
+    '''
+    torch.manual_seed(seed)
+    # Image transformations
+    transform_train = transforms.Compose([
+        transforms.RandomResizedCrop(64),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262]),
+    ])
+
+    transform_test = transforms.Compose([
+        transforms.Resize(64),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262]),
+    ])
+    # Set dataset paths
+    dr_ds = '../datasets/'
+    train_dir = dr_ds+'tiny-imagenet-200/train'
+    val_dir = dr_ds+'tiny-imagenet-200/test'
+
+    # Load datasets
+    trainset = ImageFolder(train_dir, transform=transform_train)
+    testset = ImageFolder(val_dir, transform=transform_test)
+    
+    # ---------------------------------------------- st: Get the indices: (root 10%, q 90%->[10% p, 90% cln])
+    if load==False:
+        num_train = len(trainset)
+        # Shuffle the indices
+        torch.manual_seed(42)  # For reproducibility
+        indices = torch.randperm(num_train).tolist()
+
+        # make 10% poisoned  
+        split = int(0.1 * num_train)
+        ids_p = indices[:split]
+        ids_cln_all = indices[split:]
+
+        # make 5% root  
+        split2 = int(0.05 *num_train) 
+        ids_root = ids_cln_all[:split2]
+        ids_cln = ids_cln_all[split2:]
+        ids_q = ids_p+ids_cln
         
         with open(foloder+'/cifar10_indices.pkl', 'wb') as f:
             pickle.dump({'ids_root': ids_root, 'ids_q': ids_q, 'ids_p': ids_p, 'ids_cln': ids_cln}, f)
