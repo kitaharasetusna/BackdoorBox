@@ -437,18 +437,18 @@ def prepare_ImageNet_datasets(foloder, load=False, seed=42):
         transforms.RandomResizedCrop(64),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262]),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     transform_test = transforms.Compose([
-        transforms.Resize(64),
+        transforms.RandomResizedCrop(64),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262]),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     # Set dataset paths
     dr_ds = '../datasets/'
     train_dir = dr_ds+'tiny-imagenet-200/train'
-    val_dir = dr_ds+'tiny-imagenet-200/test'
+    val_dir = dr_ds+'tiny-imagenet-200/val'
 
     # Load datasets
     trainset = ImageFolder(train_dir, transform=transform_train)
@@ -482,3 +482,4 @@ def prepare_ImageNet_datasets(foloder, load=False, seed=42):
     # ---------------------------------------------- ed: Get the indices
 
     return trainset, testset, ids_root, ids_q, ids_p, ids_cln 
+    
