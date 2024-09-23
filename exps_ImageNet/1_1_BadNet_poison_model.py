@@ -54,6 +54,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/Badnet'
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 256; epoch_Badnet = 300; lr_Badnet = 1e-4
 os.makedirs(exp_dir, exist_ok=True)
+train_detecor = True
 
 # ----------------------------------------- 3 load model ------------------------------------------
 device = torch.device("cuda:0")
@@ -63,14 +64,15 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/checkpoint.pth')['model'])
+if not train_detecor:
+    model.load_state_dict(torch.load(exp_dir+'/checkpoint.pth')['model'])
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=lr_Badnet)
 
 
 # ----------------------------------------- 4 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets(foloder=exp_dir,
-                                load=False)
+                                load=True)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
@@ -111,7 +113,11 @@ for epoch_ in range(epoch_Badnet):
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device) 
         ACC.append(ACC_); ASR.append(ASR_)
-        torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')
+        if not train_detecor:
+            torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')
+        else:
+            torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_detector.pth')
+            sys.exit(0)
         with open(exp_dir+f'/step1_train_badnet.pkl', 'wb') as f:
             pickle.dump({'ACC': ACC, 'ASR': ASR },f)
         model.train()
