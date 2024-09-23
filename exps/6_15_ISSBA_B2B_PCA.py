@@ -167,6 +167,8 @@ plt.scatter(data_2d2[:, 0], data_2d2[:, 1], color='blue', s=0.1, marker='x' ,lab
 plt.scatter(data_2d[:, 0], data_2d[:, 1], color='orange', s=0.1, label='after', marker='.')
 plt.legend(markerscale=20)
 plt.grid()
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
 plt.savefig(exp_dir+'/PCA_2D_clean.pdf')
 
 
@@ -196,7 +198,6 @@ plt.scatter(data_2d3[:, 0], data_2d3[:, 1], color='red', s=0.1, marker='o' ,labe
 
 plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
-plt.title('PCA - 2D Projection')
 plt.grid()
 plt.show()
 plt.legend(markerscale=20)

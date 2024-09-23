@@ -60,10 +60,10 @@ model.requires_grad_(False)
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
-                                load=True)
+                                load=False)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
-assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
+assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
 
 ds_questioned = utils_attack.CustomCIFAR10Badnet(
     ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
@@ -158,6 +158,8 @@ all_logits2 = torch.load(exp_dir+'/ndarray_mali.pth')
 data_2d2 = pca_2d.fit_transform(all_logits2)
 plt.scatter(data_2d2[:, 0], data_2d2[:, 1], color='blue', s=0.1, marker='x' ,label='before')
 plt.scatter(data_2d[:, 0], data_2d[:, 1], color='orange', s=0.1, label='after', marker='.')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
 plt.legend(markerscale=20)
 plt.grid()
 plt.savefig(exp_dir+'/PCA_2D_clean.pdf')
@@ -188,7 +190,6 @@ plt.scatter(data_2d3[:, 0], data_2d3[:, 1], color='red', s=0.1, marker='o' ,labe
 
 plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
-plt.title('PCA - 2D Projection')
 plt.grid()
 plt.show()
 plt.legend(markerscale=20)
