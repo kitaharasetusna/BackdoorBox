@@ -57,7 +57,7 @@ label_backdoor = 6
 bs_tr = 512; epoch_WaNet = 20; lr_WaNet = 1e-4
 bs_tr2 = 50
 lr_B = 1e-4;epoch_B = 30 
-lr_ft = 1e-4; epoch_SAU=10
+lr_ft = 1e-5; epoch_SAU=10
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
@@ -72,7 +72,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_3.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr_WaNet)
 
