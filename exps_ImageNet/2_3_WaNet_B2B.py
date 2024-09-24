@@ -79,8 +79,8 @@ dataset = 'tiny_img'; num_classes = 200
 label_backdoor = 6
 bs_tr = 512; epoch_WaNet = 20; lr_WaNet = 1e-4
 bs_tr2 = 50
-lr_B = 1e-4;epoch_B = 30 
-lr_ft = 1e-5
+lr_B = 3e-3;epoch_B = 30 
+lr_ft = 5e-5
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -166,6 +166,8 @@ def relu_(x, threshold=0.5):
         return torch.tensor(0.0)
 
 if train_B:
+    pth_path = exp_dir+'/'+f'B_theta_{20}.pth'
+    B_theta.load_state_dict(torch.load(pth_path))
     # pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
     # B_theta.load_state_dict(torch.load(pth_path))
     loss_fn_alex = lpips.LPIPS(net='alex').cuda()
@@ -187,7 +189,7 @@ if train_B:
             # lpips_loss_op = loss_fn_alex(X_root, B_root)
             # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
             # loss = 20*los_mse + loss_wass
-            loss = los_logits+los_mse
+            loss = los_logits+2*los_mse
           
             loss.backward()
             optimizer.step()
@@ -201,7 +203,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{25}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
