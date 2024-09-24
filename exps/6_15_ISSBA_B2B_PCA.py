@@ -76,7 +76,7 @@ ds_questioned = utils_attack.CustomCIFAR10ISSBA(
 # dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
 #     num_workers=0,drop_last=False,
 # )
-dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
+dl_te = DataLoader(dataset= ds_te,batch_size=256,shuffle=False,
     num_workers=0, drop_last=False
 )
 
@@ -114,6 +114,7 @@ optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 train_B = False
 pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
 B_theta.load_state_dict(torch.load(pth_path))
+B_theta_ori = utils_attack.Encoder_no(); B_theta_ori = B_theta_ori.to(device)
 
 # # Example data: Two 10-dimensional lists
 # data = np.array([
@@ -123,22 +124,43 @@ B_theta.load_state_dict(torch.load(pth_path))
 
 # Collect predicted labels
 all_preds = []; all_logits = []
-# with torch.no_grad():
-#     for images, labels in dl_te:
-#         for xx in range(len(images)):
-#                 if labels[xx] != label_backdoor:
-#                     images[xx] = utils_attack.add_ISSBA_gen(inputs=images[xx], 
-#                                                         B=B_theta, device=device) 
-#         images = images.to(device)
-#         outputs = model(images)
-#         _, predicted = torch.max(outputs, 1)
-#         all_preds.extend(predicted.cpu().numpy())
-#         all_logits.extend(outputs.cpu().numpy())
+dis_bd_gen = []
+dis_bd_ran = []
+with torch.no_grad():
+    for images, labels in dl_te:
+        gen_images = copy.deepcopy(images); mali_images = copy.deepcopy(images)
+        gen_images_ori = copy.deepcopy(images)
+        for xx in range(len(gen_images)):
+            gen_images[xx] = utils_attack.add_ISSBA_gen(inputs=gen_images[xx], 
+                                                        B=B_theta, device=device) 
+        for xx in range(len(gen_images_ori)):
+            gen_images_ori[xx] = utils_attack.add_ISSBA_gen(inputs=gen_images_ori[xx], 
+                                                        B=B_theta_ori, device=device) 
+        for xx in range(len(mali_images)):
+            mali_images[xx] = utils_attack.add_ISSBA_trigger(inputs=mali_images[xx],
+                         secret=secret, encoder=encoder_issba, device=device)
+        images = images.to(device); mali_images = mali_images.to(device); gen_images=gen_images.to(device)
+        gen_images_ori = gen_images_ori.to(device)
+        outputs = model(images)
+        logits_gen = model(gen_images); logits_bd = model(mali_images); logits_gen_ori = model(gen_images_ori)
+        distance_bd_gen = F.cosine_similarity(logits_gen, logits_bd)
+        dis_bd_gen.append(distance_bd_gen)
+        distance_bd_gen_ori = F.cosine_similarity(logits_gen_ori, logits_bd)
+        dis_bd_ran.append(distance_bd_gen_ori)
+        _, predicted = torch.max(outputs, 1)
+        all_preds.extend(predicted.cpu().numpy())
+        all_logits.extend(outputs.cpu().numpy())
 
 # # Step 1: Apply PCA for dimensionality reduction (2 components)
 # all_logits = np.array(all_logits)
 # print(all_logits.shape)
 # torch.save(all_logits, exp_dir+'/ndarray.pth')
+all_dis_ran = torch.cat(dis_bd_ran)
+avg_dis_gen_ori = torch.mean(all_dis_ran).item()
+print(avg_dis_gen_ori, 'ran-mali')
+all_dis_gen = torch.cat(dis_bd_gen)
+avg_dis_gen = torch.mean(all_dis_gen).item()
+print(avg_dis_gen, 'gen-mali')
 all_logits = torch.load(exp_dir+'/ndarray.pth')
 pca_2d = PCA(n_components=2)
 data_2d = pca_2d.fit_transform(all_logits)
