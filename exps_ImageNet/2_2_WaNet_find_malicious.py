@@ -36,7 +36,7 @@ lr_B = 1e-4;epoch_B = 30
 lr_ft = 1e-4
 k = 4
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = True 
+get_smaller_idx = False 
 # -----------------------------------------3 dirs, load model
 os.makedirs(exp_dir, exist_ok=True)
 
