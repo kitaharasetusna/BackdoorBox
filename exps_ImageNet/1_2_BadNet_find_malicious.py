@@ -32,7 +32,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/Badnet'
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 256; epoch_Badnet = 300; lr_Badnet = 1e-4
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = True 
+get_smaller_idx = False 
 # -----------------------------------------3 dirs, load model
 os.makedirs(exp_dir, exist_ok=True)
 
