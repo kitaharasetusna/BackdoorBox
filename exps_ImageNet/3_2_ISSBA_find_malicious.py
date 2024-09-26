@@ -32,7 +32,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/ISSBA'
 secret_size = 20; label_backdoor = 6 
 bs_tr = 512
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = False 
+get_smaller_idx = True 
 # -----------------------------------------3 dirs, load model
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -75,7 +75,7 @@ utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_b
                                         secret=secret, encoder=encoder_issba, device=device)
 # ----------------------------------------- 5. pick up malicious samples 
 from collections import defaultdict
-pick_upX = True 
+pick_upX = False 
 if pick_upX:
     data = defaultdict(int)
     print("start FI collecting")
