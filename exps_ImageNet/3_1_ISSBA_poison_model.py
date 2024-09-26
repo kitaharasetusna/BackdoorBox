@@ -58,7 +58,7 @@ bs_tr2 = 50
 lr_B = 1e-4;epoch_B = 30 
 lr_ft = 1e-4
 os.makedirs(exp_dir, exist_ok=True)
-train_detecor = False 
+train_detecor = True 
 
 # ----------------------------------------- 3 load model ------------------------------------------
 device = torch.device("cuda:0")
