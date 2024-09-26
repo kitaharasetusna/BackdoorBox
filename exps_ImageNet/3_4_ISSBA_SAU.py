@@ -73,7 +73,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_4.pth'))
 encoder_issba = StegaStampEncoder(
     secret_size=secret_size, 
     height=64, 
