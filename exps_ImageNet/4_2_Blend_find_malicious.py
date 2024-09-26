@@ -33,7 +33,7 @@ secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = False 
+get_smaller_idx = True 
 # -----------------------------------------3 dirs, load model
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -109,7 +109,7 @@ else:
         with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)
     else:
-        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 1000))
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 500))
         ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
         with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)

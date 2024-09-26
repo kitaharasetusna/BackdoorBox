@@ -55,7 +55,7 @@ secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
 os.makedirs(exp_dir, exist_ok=True)
-train_detecor = True 
+train_detecor = False 
 
 # ----------------------------------------- 3 load model ------------------------------------------
 device = torch.device("cuda:0")

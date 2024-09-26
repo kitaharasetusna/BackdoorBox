@@ -949,7 +949,51 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
             loss=loss1
-            loss=loss1+0.01*loss2
+            # loss=loss1+0.01*loss2
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        # ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+        #                                  triggerX=triggerX, triggerY=triggerY, device=device) 
+        ACC_, ASR_ = test_asr_acc_blended(dl_te=dl_te, model=model,
+                            label_backdoor=label_backdoor, pattern=pattern, device=device)
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
+
+
+def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, pattern, optimizer, criterion, alpha=0.2):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
+                                                        B=B, device=device) 
+            inputs, targets = X_root.to(device), Y_root.to(device)
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            outputs_bd = model(inputs_bd)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            outputs2 = model(X_sus)
+            loss2 = -criterion(outputs2, Y_sus)
+            loss3 = criterion(outputs_bd, targets_bd)
+            loss=0.01*loss3+loss1
+            # loss=loss1+0.01*loss2
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
