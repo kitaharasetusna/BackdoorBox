@@ -76,10 +76,10 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp7_TinyImageNet/ISSBA' 
 secret_size = 20; label_backdoor = 6 
-bs_tr = 512
+bs_tr = 128 
 bs_tr2 = 50
 lr_B = 3e-3;epoch_B = 30 
-lr_ft = 1e-4
+lr_ft = 3e-5
 train_B = False 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -128,7 +128,7 @@ utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_b
                                         secret=secret, encoder=encoder_issba, device=device)
 
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 
 if train_B:
     with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
@@ -151,10 +151,10 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10ISSBA_whole(ds_tr,
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 # TODO: change this
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
@@ -202,7 +202,7 @@ if train_B:
                                                 B=B_theta, device=device)
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{5}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
