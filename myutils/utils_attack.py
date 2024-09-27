@@ -368,10 +368,11 @@ class CustomCIFAR10ISSBA_whole(torch.utils.data.Dataset):
             label = self.bd_label
         return image, label
 
-def add_ISSBA_gen(inputs, B, device):
+def add_ISSBA_gen(inputs, B, device, clamp=False):
     image_input= inputs.to(device)
     encoded_image = B(image_input) 
-    # encoded_image = encoded_image.clamp(0, 1)
+    if clamp==True:
+        encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0) 
 
 def test_asr_acc_ISSBA(dl_te, model, label_backdoor, secret, encoder, device):
@@ -928,6 +929,8 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
     model.train()
     # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
     #                                     secret=secret, encoder=encoder, device=device) 
+    test_asr_acc_blended(dl_te=dl_te, model=model,
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha)
     for ep_ in range(epoch):
         for i in range(max(len(dl_root), len(dl_sus))):
             X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
@@ -936,7 +939,7 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
                 inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
-                                                        B=B, device=device) 
+                                                        B=B, device=device, clamp=True) 
             inputs = torch.cat((inputs_bd,X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
             inputs, targets = inputs.to(device), targets.to(device)
@@ -949,7 +952,8 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
             loss=loss1
-            # loss=loss1+0.01*loss2
+            if ep_ >=5:
+                loss=loss1+0.03*loss2
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
@@ -958,7 +962,7 @@ def fine_tune_Blended2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
         # ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
         #                                  triggerX=triggerX, triggerY=triggerY, device=device) 
         ACC_, ASR_ = test_asr_acc_blended(dl_te=dl_te, model=model,
-                            label_backdoor=label_backdoor, pattern=pattern, device=device)
+                            label_backdoor=label_backdoor, pattern=pattern, device=device,alpha=alpha)
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
 
@@ -971,6 +975,9 @@ def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
     model.train()
     # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
     #                                     secret=secret, encoder=encoder, device=device) 
+    ACC_, ASR_ = test_asr_acc_blended(dl_te=dl_te, model=model,
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha)
+    test_acc(dl_te=dl_root, model=model, device=device)
     for ep_ in range(epoch):
         for i in range(max(len(dl_root), len(dl_sus))):
             X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
@@ -992,7 +999,7 @@ def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
             loss3 = criterion(outputs_bd, targets_bd)
-            loss=0.01*loss3+loss1
+            loss=0.01*loss3+loss1+0.1*loss2
             # loss=loss1+0.01*loss2
             # do a backwards pass
             loss.backward()
@@ -1002,7 +1009,7 @@ def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
         # ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
         #                                  triggerX=triggerX, triggerY=triggerY, device=device) 
         ACC_, ASR_ = test_asr_acc_blended(dl_te=dl_te, model=model,
-                            label_backdoor=label_backdoor, pattern=pattern, device=device)
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha)
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
 

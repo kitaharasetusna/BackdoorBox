@@ -45,10 +45,11 @@ bs_tr = 128
 idx_blend = 656
 bs_tr2 = 50 
 lr_B = 1e-4;epoch_B = 100 
-lr_ft = 5e-5
+lr_ft = 1e-4
 train_B = False 
 if not train_B:
     bs_tr2=128
+alpha=0.2
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -77,7 +78,7 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 
 pattern, _ = ds_te[idx_blend] #(3, 32, 32)
 ds_questioned = utils_attack.CustomCIFAR10Blended(original_dataset=ds_tr, subset_indices=ids_q,
-                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=0.5)
+                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=alpha)
 
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
@@ -87,7 +88,7 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 )
 
 ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.5) 
+                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha) 
 
 if train_B:
     with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
@@ -105,7 +106,7 @@ print(TP/(TP+FP))
 
 # ----------------------------------------- 1 train B_theta  
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10Blended_whole(ds_tr, ids_p,label_backdoor, pattern, alpha=0.5)
+ds_whole_poisoned = utils_attack.CustomCIFAR10Blended_whole(ds_tr, ids_p,label_backdoor, pattern, alpha=alpha)
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
@@ -174,7 +175,7 @@ else:
             image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
-            encoded_image = utils_attack.add_blended_trigger(image_c, pattern, alpha=0.5)
+            encoded_image = utils_attack.add_blended_trigger(image_c, pattern, alpha=alpha)
             tensor_badnet = copy.deepcopy(encoded_image).to(device)
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
@@ -200,10 +201,10 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_Blended3(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_Blended2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                     B=B_theta, device=device, dl_te=dl_te, dl_sus=dl_sus, loader_root_iter=loader_root_iter,
                                     loader_sus_iter=loader_sus_iter, epoch=10, pattern=pattern,optimizer=optimizer,
-                                    criterion=criterion, alpha=0.5)
+                                    criterion=criterion, alpha=alpha)
 
 
 

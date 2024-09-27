@@ -54,6 +54,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/Blended'
 secret_size = 20; label_backdoor = 6
 bs_tr = 128; epoch_Blended = 20; lr_Blended = 1e-4
 idx_blend = 656
+alpha=0.2
 os.makedirs(exp_dir, exist_ok=True)
 train_detecor = False 
 
@@ -81,7 +82,7 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 # ----------------------------------------- 5 train model 
 pattern, _ = ds_te[idx_blend] #(3, 32, 32)
 ds_questioned = utils_attack.CustomCIFAR10Blended(original_dataset=ds_tr, subset_indices=ids_q,
-                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=0.5)
+                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=alpha)
 
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
@@ -91,7 +92,7 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 )
 
 ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.5) 
+                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha) 
 
 model.train()
 ACC = []; ASR= []
@@ -112,7 +113,7 @@ for epoch_ in range(epoch_Blended):
     if True:
         model.eval()
         ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.5) 
+                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha) 
         ACC.append(ACC_); ASR.append(ASR_)
         if not train_detecor:
             torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')

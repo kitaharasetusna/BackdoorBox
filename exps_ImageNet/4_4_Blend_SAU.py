@@ -58,11 +58,12 @@ bs_tr = 128
 idx_blend = 656
 bs_tr2 = 128 
 lr_B = 1e-4; epoch_B = 100 
-lr_ft = 1e-4; epoch_SAU = 10 
+lr_ft = 1e-5; epoch_SAU = 10 
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
 lmd_1 = 1; lmd_2 = 0.0; lmd_3 = 1
+alpha = 0.2
 os.makedirs(exp_dir, exist_ok=True)
 
 # ----------------------------------------- 3 load model ------------------------------------------
@@ -87,7 +88,7 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 
 pattern, _ = ds_te[idx_blend] #(3, 32, 32)
 ds_questioned = utils_attack.CustomCIFAR10Blended(original_dataset=ds_tr, subset_indices=ids_q,
-                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=0.5)
+                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=alpha)
 
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
@@ -97,7 +98,7 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 )
 
 ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.5) 
+                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha) 
 
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
@@ -195,6 +196,6 @@ for round in range(epoch_SAU):
             # delete the useless variable to save memory
             del logits, logits_ref, per_logits, per_logits_ref, loss_cl, loss_at, loss_shared, loss
     utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.5)      
+                        label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha)      
 
     
