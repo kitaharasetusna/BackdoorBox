@@ -35,7 +35,7 @@ dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 sig_delta = 40; sig_f = 6
-train_detecor = False
+train_detecor = True 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
