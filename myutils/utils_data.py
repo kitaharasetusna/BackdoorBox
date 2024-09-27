@@ -553,13 +553,11 @@ def prepare_ImageNet_datasets_batt(foloder, load=False, seed=42):
     print("Loading training data")
     train_transform = transforms.Compose([
                 transforms.ToTensor(),
-                normalize,
             ])
     ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)
     print("Loading validation data")
     val_transform = transforms.Compose([
         transforms.ToTensor(),
-        normalize,
     ])
     ds_te = tiny_imagenet_dataset.TinyImageNet('../data', split='val', download=False, transform=val_transform)
  
