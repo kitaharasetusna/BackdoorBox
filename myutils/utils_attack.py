@@ -1015,7 +1015,9 @@ def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus,
 
 
 # --------------------------------------------------------- BATT --------------------------------------------------------------
-def add_batt_trigger(inputs, rotation):
+def add_batt_trigger(inputs, rotation, denorm=False, trans_de=None):
+    if denorm == True:
+        inputs = trans_de(inputs)
     # Convert tensor to PIL image for rotation
     img_pil = transforms.ToPILImage()(inputs)
     # Rotate the PIL image
@@ -1024,7 +1026,9 @@ def add_batt_trigger(inputs, rotation):
     inputs = transforms.ToTensor()(img_pil) 
     return inputs
 
-def add_random_batt_trigger(inputs):
+def add_random_batt_trigger(inputs, denorm=False, trans_de=None):
+    if denorm == True:
+       inputs = trans_de(inputs) 
     # Convert tensor to PIL image for rotation
     img_pil = transforms.ToPILImage()(inputs)
     # Rotate the PIL image
@@ -1034,11 +1038,13 @@ def add_random_batt_trigger(inputs):
     return inputs
 
 class CustomCIFAR10BATT(torch.utils.data.Dataset):
-    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, roation):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, roation, unorm=False, denorm=None):
         self.original_dataset = Subset(original_dataset, subset_indices)
         self.trigger_indices = set(trigger_indices)
         self.bd_label = label_bd
         self.rotation = roation
+        self.unorm=unorm
+        self.denorm = denorm
 
     def __len__(self):
         return len(self.original_dataset)
@@ -1052,11 +1058,11 @@ class CustomCIFAR10BATT(torch.utils.data.Dataset):
         ])
         if original_idx in self.trigger_indices:
             # TODO: change this to BATT
-            image = add_batt_trigger(inputs=image, rotation=self.rotation) 
+            image = add_batt_trigger(inputs=image, rotation=self.rotation, denorm=self.unorm, trans_de=self.denorm) 
             #add_badnet_trigger(inputs=image, triggerY=self.triggerY, triggerX=self.triggerX) 
             label = self.bd_label
         else:
-            image = add_random_batt_trigger(inputs=image)
+            image = add_random_batt_trigger(inputs=image, denorm=self.unorm, trans_de=self.denorm)
         return image, label
 
 

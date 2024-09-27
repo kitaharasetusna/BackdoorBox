@@ -22,6 +22,7 @@ from torch.utils.data import Subset
 from torchvision import models
 
 
+
 def validate(model, val_loader, criterion):
     model.eval()
     val_loss = 0.0
