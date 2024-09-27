@@ -111,7 +111,7 @@ ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-train_B = True 
+train_B = False 
 
 def relu_(x, threshold=0.5):
     if x>threshold:
@@ -186,7 +186,7 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_SIG(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_SIG2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, delta=sig_delta,
                                 freq=sig_f, 
                                 epoch=20, optimizer=optimizer, criterion=criterion,

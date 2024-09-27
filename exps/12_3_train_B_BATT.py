@@ -188,7 +188,7 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_BATT(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_BATT2_1(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, rotation=rotation, 
                                 epoch=20, optimizer=optimizer, criterion=criterion,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))

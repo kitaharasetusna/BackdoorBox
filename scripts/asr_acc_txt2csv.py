@@ -1,11 +1,13 @@
 import re
 import csv
 
-attacks_ =['ISSBA', 'WaNet','BATT', 'Blended']
+# attacks_ =['ISSBA', 'WaNet','BATT', 'Blended']
+attacks_ =['BATT']
 for attack in attacks_:
-    exp_dir = f'../experiments/exp7_TinyImageNet/{attack}/' 
+    exp_dir = f'../experiments/exp6_FI_B/{attack}/' 
     # csv_file = '/ABL_BATT'
-    files_ = ['1_B2B', '2_ABL', '3_SAU', '4_FT']
+    # files_ = ['1_B2B', '2_ABL', '3_SAU', '4_FT']
+    files_ = ['1_B2B']
     for csv_file in files_:
         txt_file = exp_dir+csv_file+'.txt'
 
