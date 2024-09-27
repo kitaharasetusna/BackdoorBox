@@ -34,7 +34,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/BATT'
 dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 3e-3
-rotation = 16; train_detecor = False  
+rotation = 16; train_detecor = True 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
