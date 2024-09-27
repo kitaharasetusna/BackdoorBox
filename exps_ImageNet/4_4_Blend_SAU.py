@@ -58,7 +58,7 @@ bs_tr = 128
 idx_blend = 656
 bs_tr2 = 128 
 lr_B = 1e-4; epoch_B = 100 
-lr_ft = 1e-5; epoch_SAU = 10 
+lr_ft = 1e-4; epoch_SAU = 10 
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
