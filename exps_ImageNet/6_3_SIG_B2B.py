@@ -47,7 +47,7 @@ bs_tr2 = 128
 sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-4
-train_B = True 
+train_B = False 
 if train_B:
     bs_tr2=50
 alpha=0.2
@@ -151,9 +151,9 @@ if train_B:
             los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
             # lpips_loss_op = loss_fn_alex(X_root, B_root)
             # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
-            # loss = 20*los_mse + loss_wass
+            loss = 2*los_mse + los_logits
             
-            loss = los_logits
+            # loss = los_logits
           
             loss.backward()
             optimizer.step()
@@ -167,7 +167,7 @@ if train_B:
                                                 B=B_theta, device=device) 
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{5}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -179,7 +179,7 @@ else:
             image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
-            encoded_image = utils_attack.add_batt_trigger(inputs=image_c, rotation=rotation)
+            encoded_image = utils_attack.add_SIG_trigger(inputs=image_c, delta=sig_delta, frequency=sig_f)
             tensor_badnet = copy.deepcopy(encoded_image).to(device)
             encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
