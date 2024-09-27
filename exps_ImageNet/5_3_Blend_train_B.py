@@ -49,7 +49,7 @@ lr_B = 1e-2;epoch_B = 100
 lr_ft = 1e-4
 train_B = False 
 if not train_B:
-    bs_tr2=128
+    bs_tr2=50
 alpha=0.2
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -91,12 +91,13 @@ dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
 ACC_, ASR_ = utils_attack.test_asr_acc_batt(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                     rotation=rotation, device=device)
 
-if train_B:
-    with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
-        idx_sus = pickle.load(f)
-else:
-    with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
-        idx_sus = pickle.load(f)
+# if train_B:
+#     with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+#         idx_sus = pickle.load(f)
+# else:
+with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
+    idx_sus = pickle.load(f)
+print(len(idx_sus))
 TP, FP = 0.0, 0.0
 for s in idx_sus:
     if s in ids_p:

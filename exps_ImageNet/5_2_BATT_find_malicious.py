@@ -106,7 +106,7 @@ else:
         with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)
     else:
-        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 1000))
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 500))
         ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
         with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)
