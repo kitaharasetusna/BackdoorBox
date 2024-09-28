@@ -43,13 +43,13 @@ exp_dir = '../experiments/exp7_TinyImageNet/SIG'
 dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
-bs_tr2 = 128
+bs_tr2 = 128 
 sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-4
 train_B = False 
-if train_B:
-    bs_tr2=50
+# if train_B:
+#     bs_tr2=50
 alpha=0.2
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -63,7 +63,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+f'/step1_model_2.pth'))
+model.load_state_dict(torch.load(exp_dir+f'/step1_model_4.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -71,8 +71,8 @@ model.requires_grad_(False)
 
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
-ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_batt(foloder=exp_dir,
-                                load=False)
+ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
+                                load=True)
 # ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_batt(foloder=exp_dir,
 #                                 load=True)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
@@ -133,7 +133,8 @@ def relu_(x, threshold=0.5):
         return torch.tensor(0.0)
 
 if train_B:
-    loss_fn_alex = lpips.LPIPS(net='alex').cuda()
+    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
+    B_theta.load_state_dict(torch.load(pth_path))
     for epoch_ in range(epoch_B):
         loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
         for i in range(max(len(dl_root), len(dl_sus))):
@@ -167,7 +168,7 @@ if train_B:
                                                 B=B_theta, device=device) 
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
+    pth_path = exp_dir+'/'+f'B_theta_{5}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -176,19 +177,16 @@ else:
             image_, _=ds_x_root[index]; image_c = copy.deepcopy(image_) 
             image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
             tensor_ori = copy.deepcopy(image_).to(device)
-            image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
             encoded_image = utils_attack.add_SIG_trigger(inputs=image_c, delta=sig_delta, frequency=sig_f)
             tensor_badnet = copy.deepcopy(encoded_image).to(device)
-            encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
-            plt.savefig(exp_dir+f'/badnet_{index}.pdf')
+            plt.savefig(exp_dir+f'/SIG_{index}.pdf')
 
             encoded_image = B_theta(image)
             tensor_gen = copy.deepcopy(encoded_image).to(device)
-            encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
             plt.savefig(exp_dir+f'/generated_{index}.pdf')
@@ -205,10 +203,10 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_SIG2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_SIG(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, delta=sig_delta,
                                 freq=sig_f, 
-                                epoch=20, optimizer=optimizer, criterion=criterion,
+                                epoch=10, optimizer=optimizer, criterion=criterion,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
 
 
