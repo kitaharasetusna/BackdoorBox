@@ -37,7 +37,7 @@ def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, d
     cln_num = 0; bd_num = 0
     for images, labels in dl_train:
         cln_num+=(bs_tr-num_poison); bd_num+=num_poison
-        trace_fim_cln, loss_cln = utils_defence.compute_fisher_information(model, images[num_poison:], 
+        trace_fim_cln, loss_cln = utils_defence.compute_fisher_information_layer_spec(model, images[num_poison:], 
                                                                 labels[num_poison:], criterion,
                                                                 device= device, loss_=True)
         avg_trace_fim += trace_fim_cln; avg_loss+=loss_cln
@@ -48,7 +48,7 @@ def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, d
             # inputs_bd[xx] = utils_attack.add_badnet_trigger(inputs=inputs_bd[xx], triggerY=triggerY,
             #                                                 triggerX=triggerX) 
             targets_bd[xx] = label_backdoor
-        trace_fim_bd, loss_bd = utils_defence.compute_fisher_information(model, inputs_bd[:num_poison], 
+        trace_fim_bd, loss_bd = utils_defence.compute_fisher_information_layer_spec(model, inputs_bd[:num_poison], 
                                                                     targets_bd[:num_poison], criterion,
                                                                     device=device, loss_=True)
         avg_trace_fim_bd += trace_fim_bd; avg_loss_bd+=loss_bd
@@ -67,31 +67,22 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/ISSBA' 
-secret_size = 20; label_backdoor = 6 
-bs_tr = 128; ratio = 0.1
+exp_dir = '../experiments/exp6_FI_B/Badnet' 
+label_backdoor = 6; triggerX = 6; triggerY=6 
+bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
+ratio = 0.5 
 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
 
 device = torch.device("cuda:0")
-# Load ISSBA encoder
-encoder_issba = StegaStampEncoder(
-    secret_size=secret_size, 
-    height=32, 
-    width=32,
-    in_channel=3).to(device)
-savepath = os.path.join(exp_dir, 'encoder_decoder.pth'); state_pth = torch.load(savepath)
-encoder_issba.load_state_dict(state_pth['encoder_state_dict']) 
-secret = torch.FloatTensor(np.random.binomial(1, .5, secret_size).tolist()).to(device)
+
 model = core.models.ResNet(18); model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/model_1.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
-encoder_issba.eval(); model.eval()
-encoder_issba.requires_grad_(False)
-
+model.eval()
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
@@ -100,8 +91,8 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
 
-ds_questioned = utils_attack.CustomCIFAR10ISSBA(
-    ds_tr, ids_q, ids_p, label_backdoor, secret, encoder_issba, device)
+ds_questioned = utils_attack.CustomCIFAR10Badnet(
+    ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
 # dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
 #     num_workers=0,drop_last=False,
 # )
@@ -109,8 +100,7 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 
-# ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
-#                                         secret=secret, encoder=encoder_issba, device=device)
+
 ds_x_q2 = Subset(ds_tr, ids_q)
 dl_x_q2 = DataLoader(
     dataset= ds_x_q2,
@@ -119,12 +109,7 @@ dl_x_q2 = DataLoader(
     num_workers=0,
     drop_last=False,
 )
-avg_trace_fim, avg_trace_fim_bd, avg_loss_cln, avg_loss_bd = get_train_fim_ISSBA(model=model, dl_train=dl_x_q2,
-                                                          encoder=encoder_issba, secret=secret,
-                                                          ratio_poison=0.1, bs_tr=bs_tr,
-                                                          device=device)
-print(avg_trace_fim, 'clean')
-print(avg_trace_fim_bd, 'bd')
+
 # ----------------------------------------- 1.1 compute average FI in root data
 # TODO:
 
@@ -137,12 +122,11 @@ if pick_upX:
     for i in range(len(ds_questioned)):
         image, label = ds_questioned[i]  
         image, label = image.unsqueeze(0), torch.tensor(label).unsqueeze(0)
-        fi_value, loss = utils_defence.compute_fisher_information(model=model, images=image, 
-                                                            labels=label, criterion=criterion,
-                                                            device=device, loss_=True)  # 计算FI值
+        loss = utils_defence.compute_loss(model=model, images=image, labels=label,
+                                          criterion=criterion, device=device) 
         idx_ori = ds_questioned.original_dataset.indices[i]
-        print(idx_ori, fi_value, loss)
-        data[idx_ori] = (fi_value.item(), loss)
+        print(idx_ori, 0, loss)
+        data[idx_ori] = (0, loss)
     print("finish FI collecting")
     with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'wb') as f:
         pickle.dump(data, f)
@@ -155,9 +139,9 @@ else:
         data = pickle.load(f)
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
-    top_10_percent_count = max(1, int(len(sorted_items) * ratio) // 100)
+    top_10_percent_count = max(1, int(len(sorted_items) * ratio // 100))
     ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
-    with open(exp_dir+f'/idx_suspicious_{ratio}.pkl', 'wb') as f:
+    with open(exp_dir+f'/idx_suspicious2_{ratio}.pkl', 'wb') as f:
         pickle.dump(ids_suspicious, f)
     TP, FP, TN, FN = 0.0, 0.0, 0.0, 0.0
     for s in ids_suspicious:
@@ -169,4 +153,4 @@ else:
     TN = len(ds_questioned)-FP
     F1 = 2*TP/(2*TP+FP+FN)
     precision = TP/(TP+FP)
-    print(F1, precision)
+    print(F1, precision, TP, FP)

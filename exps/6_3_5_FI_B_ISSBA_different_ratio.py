@@ -69,8 +69,8 @@ torch.manual_seed(42)
 # ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/ISSBA' 
 secret_size = 20; label_backdoor = 6 
-bs_tr = 128; ratio = 15
-epoch_B = 10; lr_B = 1e-4; lr_ft = 1e-4
+bs_tr = 45; ratio = 0.1
+epoch_B = 10; lr_B = 1e-4; lr_ft = 3e-5
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)

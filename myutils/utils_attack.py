@@ -711,7 +711,10 @@ def gen_grid(height, k):
 
     return identity_grid, noise_grid
 
-def add_WaNet_trigger(inputs, identity_grid, noise_grid, noise=False, s=0.5, grid_rescale=1.2, noise_rescale=2):
+def add_WaNet_trigger(inputs, identity_grid, noise_grid, noise=False, s=0.5, grid_rescale=1, noise_rescale=2):
+    '''
+        make grid rescale to 1.2 when using tiny-ImageNet
+    '''
     # inputs (3, 32, 32); outputs: (3, 32, 32)
     # identity_grid, noise_gird: (1, 32, 32, 2)
     h = identity_grid.shape[2]
