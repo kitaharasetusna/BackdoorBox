@@ -237,6 +237,33 @@ class EncoderWithFixedTransformation(nn.Module):
         x_encoded = self.encoder(x_transformed)
         return x_transformed, x_encoded 
 
+class EncoderWithFixedTransformation_2(nn.Module):
+    def __init__(self, input_channels=3, device=None):
+        super(EncoderWithFixedTransformation_2, self).__init__()
+        
+        # Fixed Spatial Transformer Network for learning transformations
+        self.fixed_stn = FixedSTN(input_channels, device)
+        self.device = device
+        
+        # Encoder network: keeps the output shape the same as the input shape (32x32)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),  # Padding to preserve spatial size
+            nn.ReLU(True),
+            nn.Conv2d(16, input_channels, kernel_size=3, padding=1),  # Final layer output back to 3 channels
+        )
+    
+    def forward(self, x):
+        # Apply the learned fixed transformation using STN
+        x_transformed = self.fixed_stn(x)
+        # Pass the transformed input through the encoder
+        x_encoded = self.encoder(x)
+
+        x_tf_enc = self.encoder(x_transformed)
+        x_enc_tf = self.fixed_stn(x_encoded)
+
+        return x_transformed, x_encoded, x_tf_enc, x_enc_tf 
+
+
 def create_mask():
     mask = torch.ones((3, 32, 32), dtype=torch.float32)
     mask[:, ::2, ::2] = 0
@@ -1004,9 +1031,57 @@ def fine_tune_BATT2_1(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
             outputs2 = model(X_sus)
             loss2 = -criterion(outputs2, Y_sus)
             loss_bd = criterion(outputs_bd, targets_bd)
-            loss=loss1+0.03*loss_bd
+            loss=loss1+loss_bd
             if ep_ >=5:
-                loss=loss1+loss_bd+0.03*loss2
+                loss=loss1+loss_bd+0.01*loss2
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        # ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+        #                                  triggerX=triggerX, triggerY=triggerY, device=device) 
+        ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    rotation=rotation, device=device) 
+        model.train()
+
+def fine_tune_BATT2_3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, rotation, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    rotation=rotation, device=device) 
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                        B=B, device=device) 
+            inputs = X_root 
+            targets = Y_root 
+            
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            outputs_bd = model(inputs_bd)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            outputs2 = model(X_sus)
+            loss2 = -criterion(outputs2, Y_sus)
+            loss_bd = criterion(outputs_bd, targets_bd)
+            loss=loss1+loss_bd
+            if ep_ >=5:
+                loss=loss1+loss_bd+0.015*loss2
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
@@ -1165,9 +1240,15 @@ class CustomCIFAR10BATT_whole(torch.utils.data.Dataset):
 
 def add_BATT_gen(inputs, B, device):
     image_input= inputs.to(device)
-    encoded_image = B(image_input) 
+    _, encoded_image = B(image_input) 
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0)
+
+def add_BATT_gen_2(inputs, B, device):
+    image_input= inputs.to(device)
+    _, _, _, gen_image = B(image_input) 
+    # encoded_image = encoded_image.clamp(0, 1)
+    return gen_image.squeeze(0)
 
 def test_asr_acc_BATT_gen(dl_te, model, label_backdoor, B, device):
     model.eval()
@@ -1197,6 +1278,36 @@ def test_asr_acc_BATT_gen(dl_te, model, label_backdoor, B, device):
         ACC = 100.00 * float(cln_correct) / cln_num
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
+
+def test_asr_acc_BATT_gen_2(dl_te, model, label_backdoor, B, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    # TODO: to B
+                    inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                      B=B, device=device) 
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        return ACC, ASR
+
 
 def test_asr_acc_BATT_gen2(dl_te, model, label_backdoor, B, device):
     model.eval()

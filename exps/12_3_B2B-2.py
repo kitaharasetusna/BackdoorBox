@@ -43,10 +43,10 @@ label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
 bs_tr2 = 32
-lr_B = 1e-2;epoch_B = 20 
-lr_ft = 1e-4
-train_B = True 
-B_theta_struct = 'EncoSTN' 
+lr_B = 1e-2;epoch_B = 5 
+lr_ft = 5e-5
+train_B = False 
+B_theta_struct = 'EncoSTN-2' 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -108,8 +108,10 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10BATT_whole(original_dataset=ds_tr,
 # B_theta = utils_attack.EncoderWithFixedTransformation(input_channels=3, device=device); 
 if B_theta_struct == 'STN':
     B_theta = utils_attack.FixedSTN(input_channels=3, device=device)
-else:
+elif B_theta_struct =='EncoSTN':
     B_theta = utils_attack.EncoderWithFixedTransformation(input_channels=3, device=device)
+elif B_theta_struct == 'EncoSTN-2':
+    B_theta = utils_attack.EncoderWithFixedTransformation_2(input_channels=3, device=device)
 B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
@@ -139,17 +141,16 @@ if train_B:
             X_root, X_q = X_root.to(device), X_q.to(device)
 
             optimizer.zero_grad()
-            B_root_TS, B_root = B_theta(X_root)
+            B_root_TS, B_root, B_tf_enc, B_enc_ft = B_theta(X_root)
             
             los_mse = utils_attack.reconstruction_loss(X_root, B_root) 
-            logits_root = model(B_root); logits_q = model(X_q); logits_root_ts = model(B_root_TS)
+            logits_root = model(B_tf_enc); logits_q = model(X_q); logits_root_ts = model(B_root_TS)
             los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
             los_logits_ts = F.kl_div(F.log_softmax(logits_root_ts, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
-            los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
             if los_logits_ts>=1:
                 loss = los_logits_ts+2*los_mse
             else:
-                loss = los_logits_ts+los_logits+10*los_mse
+                loss = los_logits_ts+los_logits+2*los_mse
           
             loss.backward()
             optimizer.step()
@@ -159,11 +160,11 @@ if train_B:
         print(f'loss logits: {loss_logits_sum/len(dl_sus): .2f}')
         print(f'loss logits-ts: {loss_inf_sum/len(dl_sus): .2f}')
         if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
-            utils_attack.test_asr_acc_BATT_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+            utils_attack.test_asr_acc_BATT_gen_2(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                 B=B_theta, device=device)
-            torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
+            torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta2_{epoch_+1}.pth')
 else:
-    pth_path = exp_dir+'/'+f'B_theta_{5}.pth'
+    pth_path = exp_dir+'/'+f'B_theta2_{5}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -180,7 +181,7 @@ else:
             plt.imshow(issba_image)
             plt.savefig(exp_dir+f'/BATT_{index}.pdf')
 
-            _, encoded_image = B_theta(image)
+            _, _, _, encoded_image = B_theta(image)
             tensor_gen = copy.deepcopy(encoded_image).to(device)
             issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
             plt.imshow(issba_image)
@@ -198,7 +199,7 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_BATT2_1(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_BATT2_3(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, rotation=rotation, 
                                 epoch=10, optimizer=optimizer, criterion=criterion,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
