@@ -68,14 +68,13 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- 0.1 configs:
-# ----------------------------------------- 0.1 configs:
 exp_dir = '../experiments/exp6_FI_B/BATT' 
 label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 rotation = 16 
 lr_B = 1e-3;epoch_B = 100 
 lr_ft = 1e-5
-lr_root = 1e-5; epoch_root = 20 
+lr_root = 5e-5; epoch_root = 10 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
