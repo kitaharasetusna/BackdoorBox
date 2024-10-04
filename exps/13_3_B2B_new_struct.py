@@ -41,11 +41,14 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/SIG' 
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-4
-bs_tr2 = 50 
+bs_tr2 = 128 
 sig_delta = 40; sig_f = 6
-lr_B = 1e-2;epoch_B = 100 
-lr_ft = 1e-4
+lr_B = 1e-2;epoch_B = 5 
+lr_ft =1e-5
 B_theta_struct = 'EncoSTN-2' 
+train_B = False 
+if not train_B:
+    bs_tr2=50
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -59,11 +62,16 @@ criterion = nn.CrossEntropyLoss()
 model.eval()
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
-ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_SIG_non_trans(foloder=exp_dir,
+if train_B:
+    ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_SIG_non_trans(foloder=exp_dir,
+                                load=True, target_label=label_backdoor)
+else:
+    print('not training ...')
+    ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_SIG(foloder=exp_dir,
                                 load=True, target_label=label_backdoor)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
-assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ds_q)}"
+assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
 # ----------------------------------------- train model with ISSBA encoder
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
@@ -116,7 +124,7 @@ ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-train_B = True 
+
 
 def relu_(x, threshold=0.5):
     if x>threshold:
@@ -193,10 +201,10 @@ else:
     criterion = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
-    utils_attack.fine_tune_SIG2_2(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
+    utils_attack.fine_tune_SIG2_CIFAR10(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, delta=sig_delta,
                                 freq=sig_f, 
-                                epoch=20, optimizer=optimizer, criterion=criterion,
+                                epoch=10, optimizer=optimizer, criterion=criterion,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
 
 

@@ -74,8 +74,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
-lr_ft = 1e-4
-lr_root = 1e-4; epoch_root = 20 
+lr_root = 1e-5; epoch_root = 10 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)

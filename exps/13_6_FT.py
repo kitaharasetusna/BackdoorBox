@@ -72,7 +72,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 sig_delta = 40; sig_f = 6
 lr_ft = 1e-5
-lr_root = 1e-4; epoch_root = 100 
+epoch_root = 10 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -143,7 +143,7 @@ loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus)
 
 # -------------------------------------------- train backdoor using B theta on a clean model
 model_root = core.models.ResNet(18); model_root = model_root.to(device)
-criterion = nn.CrossEntropyLoss(); optimizer = torch.optim.Adam(model.parameters(), lr=lr_root)
+criterion = nn.CrossEntropyLoss(); optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 
