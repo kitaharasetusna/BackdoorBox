@@ -7,7 +7,7 @@ for attack in attacks_:
     exp_dir = f'../experiments/exp6_FI_B/{attack}/' 
     # csv_file = '/ABL_BATT'
     # files_ = ['1_B2B', '2_ABL', '3_SAU', '4_FT']
-    files_ = ['1_B2B']
+    files_ = ['1_B2B', '2_ABL', '3_SAU', '4_FT']
     for csv_file in files_:
         txt_file = exp_dir+csv_file+'.txt'
 

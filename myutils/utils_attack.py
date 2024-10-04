@@ -1244,6 +1244,12 @@ def add_BATT_gen(inputs, B, device):
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0)
 
+def add_SIG_gen(inputs, B, device):
+    image_input= inputs.to(device)
+    encoded_image = B(image_input) 
+    # encoded_image = encoded_image.clamp(0, 1)
+    return encoded_image.squeeze(0)
+
 def add_BATT_gen_2(inputs, B, device):
     image_input= inputs.to(device)
     _, _, _, gen_image = B(image_input) 
@@ -1520,7 +1526,7 @@ def fine_tune_SIG(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, load
 
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
-                inputs_bd[xx] = add_BATT_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                inputs_bd[xx] = add_SIG_gen(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device) 
             inputs = torch.cat((inputs_bd,X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
@@ -1557,7 +1563,7 @@ def fine_tune_SIG2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loa
             X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
-                inputs_bd[xx] = add_BATT_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                inputs_bd[xx] = add_SIG_gen(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device)  
             inputs = X_root 
             targets = Y_root 
@@ -1569,7 +1575,51 @@ def fine_tune_SIG2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loa
             outputs = model(inputs); outputs_bd = model(inputs_bd)
             # calculate the loss
             loss1 = criterion(outputs, targets); loss2 =criterion(outputs_bd, targets_bd)
-            loss=loss1+0.1*loss2
+            if ep_>=5:
+                loss=loss1+0.1*loss2
+            else:
+                loss = loss1
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    freq=freq, delta=delta, device=device)
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
+
+
+def fine_tune_SIG2_2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    freq=freq, delta=delta, device=device)
+    model.train()
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), B=B, device=device) 
+                # add_SIG_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                #                                         B=B, device=device)  
+            inputs = X_root 
+            targets = Y_root 
+            inputs, targets = inputs.to(device), targets.to(device)
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs); outputs_bd = model(inputs_bd)
+            # calculate the loss
+            loss1 = criterion(outputs, targets); loss2 =criterion(outputs_bd, targets_bd)
+            if ep_>=5:
+                loss=loss1+0.1*loss2
+            else:
+                loss = loss1
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
