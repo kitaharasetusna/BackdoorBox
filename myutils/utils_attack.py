@@ -8,6 +8,7 @@ from torch.utils.data import Subset
 import pickle
 import numpy as np
 import copy
+from torchvision.transforms.functional import to_pil_image
 
 def get_next_batch(loader_iter, loader):
     try:
@@ -1590,7 +1591,22 @@ def fine_tune_SIG2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loa
         model.train()
 
 
-def fine_tune_SIG2_2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+def augment_batch(batch):
+    transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(),           # Randomly flip the image horizontally
+    transforms.RandomCrop(size=32, padding=4),  # Randomly crop the image with padding
+    transforms.ToTensor(),                       # Convert PIL image or ndarray to tensor
+    
+    ])
+    augmented_batch = torch.empty_like(batch)
+    for i in range(batch.size(0)):
+        img = to_pil_image(batch[i])  # Convert to PIL Image
+        augmented_batch[i] = transform(img)
+    return augmented_batch
+
+
+
+def fine_tune_SIG2_CIFAR10(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
     '''
     fine tune with B_theta
     # TODO: fine tune with malicious sample
@@ -1600,24 +1616,32 @@ def fine_tune_SIG2_2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, l
     model.train()
     for ep_ in range(epoch):
         for i in range(max(len(dl_root), len(dl_sus))):
-            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
-            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            inputs, targets = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
             for xx in range(len(inputs_bd)):
                 inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), B=B, device=device) 
-                # add_SIG_gen(inputs=inputs_bd[xx].unsqueeze(0), 
-                #                                         B=B, device=device)  
-            inputs = X_root 
-            targets = Y_root 
+            
+
             inputs, targets = inputs.to(device), targets.to(device)
             inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
             
             optimizer.zero_grad()
             # make a forward pass
-            outputs = model(inputs); outputs_bd = model(inputs_bd)
-            # calculate the loss
-            loss1 = criterion(outputs, targets); loss2 =criterion(outputs_bd, targets_bd)
-            if ep_>=5:
-                loss=loss1+0.1*loss2
+            outputs = model(inputs); 
+            
+            loss1 = criterion(outputs, targets); 
+
+            loss = loss1
+
+            if ep_%3==0 and ep_<=8:
+                outputs_bd = model(inputs_bd)
+                loss_bd =criterion(outputs_bd, targets_bd)
+                outputs2 = model(X_sus)
+                loss2 = -criterion(outputs2, Y_sus)
+                loss = loss1+loss2+0.015*loss_bd
             else:
                 loss = loss1
             # do a backwards pass
