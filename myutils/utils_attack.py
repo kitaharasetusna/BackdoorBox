@@ -141,6 +141,19 @@ class Encoder_no(nn.Module):
         x = self.conv2(x)
         return x
 
+class Encoder_residual(nn.Module):
+    def __init__(self):
+        super(Encoder_residual, self).__init__()
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(8, 3, kernel_size=3, padding=1)
+    
+    def forward(self, x):
+        residual = x
+        x = F.relu(self.conv1(x))
+        x = self.conv2(x)
+        x = residual+x
+        x = torch.clamp(x, min=-1.0, max=1.0)
+        return x
 
 class EncoderDecoder(nn.Module):
     def __init__(self):
@@ -1542,12 +1555,12 @@ def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_
             # outputs2 = model(X_sus)
             # loss2 = -criterion(outputs2, Y_sus)
 
-            if ep_%3==0 and ep_<=8:
+            if ep_%3==0 and ep_<=1:
                 outputs_bd = model(inputs_bd)
                 loss_bd =criterion(outputs_bd, targets_bd)
                 outputs2 = model(X_sus)
                 loss2 = -criterion(outputs2, Y_sus)
-                loss = loss1+loss2+0.015*loss_bd
+                loss = loss1+loss_bd+0.015*loss2
             else:
                 loss = loss1
 

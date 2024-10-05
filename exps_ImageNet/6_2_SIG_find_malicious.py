@@ -44,7 +44,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+f'/step1_model_2.pth'))
+model.load_state_dict(torch.load(exp_dir+f'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -101,7 +101,7 @@ else:
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
     if not get_smaller_idx:
-        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 10))
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 100))
         ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
         with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)

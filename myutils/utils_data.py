@@ -664,14 +664,14 @@ def prepare_ImageNet_datasets_SIG(foloder, load=False, seed=42):
                                      std=[0.2302, 0.2265, 0.2262])
     print("Loading training data")
     train_transform= Compose([
-        transforms.Resize((32, 32)),
-        transforms.RandomCrop((32, 32), padding=5),
+        transforms.Resize((64, 64)),
+        transforms.RandomCrop((64, 64), padding=5),
         transforms.RandomRotation(10),
         transforms.RandomHorizontalFlip(p=0.5),
         ToTensor(),
     ])
     val_transform = Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((64, 64)),
         ToTensor(),
     ]) 
     ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)
@@ -721,11 +721,11 @@ def prepare_ImageNet_datasets_SIG_no_TS(foloder, load=False, seed=42):
                                      std=[0.2302, 0.2265, 0.2262])
     print("Loading training data")
     train_transform= Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((64, 64)),
         ToTensor(),
     ])
     val_transform = Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((64, 64)),
         ToTensor(),
     ]) 
     ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)

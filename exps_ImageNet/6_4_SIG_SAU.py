@@ -38,9 +38,8 @@ dataset = 'tiny_img'; num_class=200
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 bs_tr2 = 128
-sig_delta = 1; sig_f = 6
+sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
-lr_ft = 1e-4
 lr_root = 1e-5; epoch_root = 10
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
@@ -151,7 +150,7 @@ Shared_PGD_Attacker = utils_defence.Shared_PGD(model = model,
                                 pert_func = get_perturbed_image, 
                                 verbose = True)
 model.requires_grad_(True)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr_root)
 for round in range(epoch_root):
     for images, labels in dl_root:
         images = images.to(device)

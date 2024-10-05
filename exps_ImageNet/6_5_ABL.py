@@ -42,13 +42,10 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp7_TinyImageNet/SIG' 
 dataset = 'tiny_img'
 label_backdoor = 6
-bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
-bs_tr2 = 128 
-sig_delta = 1; sig_f = 6
-lr_ft = 1e-4; epoch_root = 10
-train_B = True 
-# if train_B:
-#     bs_tr2=50
+bs_tr = 128
+bs_tr2 = 128 # TODO: CHECK THIS 
+sig_delta = 40; sig_f = 6
+lr_ft = 1e-5; epoch_root = 10
 alpha=0.2
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
@@ -92,13 +89,10 @@ ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
                                                    delta=sig_delta, freq=sig_f, device=device)
 
-if train_B:
-    with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
-        idx_sus = pickle.load(f)
-else:
-    with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
-        idx_sus = pickle.load(f)
-print(len(idx_sus))
+with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
+    idx_sus = pickle.load(f)
+
+print('number of suspicious samples: ', len(idx_sus))
 TP, FP = 0.0, 0.0
 for s in idx_sus:
     if s in ids_p:
@@ -112,8 +106,6 @@ print(TP/(TP+FP))
 ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f)
 
 # B_theta = utils_attack.FixedSTN(input_channels=3, device=device)
-B_theta = utils_attack.Encoder_no()
-B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 # TODO: change this
@@ -121,7 +113,7 @@ ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
-optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_ft)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
 print(len(ds_sus), len(ds_x_root))
 
 
@@ -139,7 +131,7 @@ for epoch_ in range(epoch_root):
         Y_q_pred = model(X_q)
         # calculate the loss
 
-        loss = criterion(Y_root_pred, Y_root)-10*criterion(Y_q_pred, Y_q)
+        loss = criterion(Y_root_pred, Y_root)-criterion(Y_q_pred, Y_q)
         # do a backwards pass
         loss.backward()
         # perform a single optimization step
