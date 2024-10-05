@@ -34,7 +34,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-4
 sig_delta = 40; sig_f = 6
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = True 
+get_smaller_idx = False 
 # -----------------------------------------3 dirs, load model
 
 device = torch.device("cuda:0")
@@ -101,7 +101,7 @@ else:
     # Filter keys with values greater than 27
     sorted_items = sorted(data.items(), key=lambda item: item[1][1])
     if not get_smaller_idx:
-        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 100))
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 10))
         ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
         with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)

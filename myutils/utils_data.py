@@ -707,4 +707,58 @@ def prepare_ImageNet_datasets_SIG(foloder, load=False, seed=42):
     # ---------------------------------------------- ed: Get the indices
 
     return ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln 
-  
+
+def prepare_ImageNet_datasets_SIG_no_TS(foloder, load=False, seed=42):
+    ''' collect randomly 10% data as secure data
+        params: 
+            seed: ensure that [random split] return the same split of 
+            clean and questioned every time you call this function
+        return:
+            trainset, testset, ids_root, ids_q, ids_p, ids_cln
+    '''
+    torch.manual_seed(seed)
+    normalize = transforms.Normalize(mean=[0.4802, 0.4481, 0.3975],
+                                     std=[0.2302, 0.2265, 0.2262])
+    print("Loading training data")
+    train_transform= Compose([
+        transforms.Resize((32, 32)),
+        ToTensor(),
+    ])
+    val_transform = Compose([
+        transforms.Resize((32, 32)),
+        ToTensor(),
+    ]) 
+    ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)
+    print("Loading validation data")
+    ds_te = tiny_imagenet_dataset.TinyImageNet('../data', split='val', download=False, transform=val_transform)
+ 
+    
+    # ---------------------------------------------- st: Get the indices: (root 10%, q 90%->[10% p, 90% cln])
+    if load==False:
+        num_train = len(ds_tr)
+        # Shuffle the indices
+        torch.manual_seed(42)  # For reproducibility
+        indices = torch.randperm(num_train).tolist()
+
+        # make 10% poisoned  
+        split = int(0.1 * num_train)
+        ids_p = indices[:split]
+        ids_cln_all = indices[split:]
+
+        # make 5% root  
+        split2 = int(0.05 *num_train) 
+        ids_root = ids_cln_all[:split2]
+        ids_cln = ids_cln_all[split2:]
+        ids_q = ids_p+ids_cln
+        
+        with open(foloder+'/cifar10_indices.pkl', 'wb') as f:
+            pickle.dump({'ids_root': ids_root, 'ids_q': ids_q, 'ids_p': ids_p, 'ids_cln': ids_cln}, f)
+    else:
+        with open(foloder+'/cifar10_indices.pkl', 'rb') as f:
+            dict_ids = pickle.load(f)
+            ids_root = dict_ids['ids_root']; ids_q = dict_ids['ids_q']
+            ids_p = dict_ids['ids_p']; ids_cln = dict_ids['ids_cln']
+    # ---------------------------------------------- ed: Get the indices
+
+    return ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln 
+   

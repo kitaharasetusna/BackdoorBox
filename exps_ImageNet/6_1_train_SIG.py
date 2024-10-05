@@ -34,7 +34,7 @@ exp_dir = '../experiments/exp7_TinyImageNet/SIG'
 dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 3e-4
-sig_delta = 40; sig_f = 6
+sig_delta = 0.5; sig_f = 6
 train_detecor = False 
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
 # make a directory for experimental results

@@ -1514,7 +1514,7 @@ class CustomCIFAR10SIG_whole(torch.utils.data.Dataset):
         return image, label
 
 
-def fine_tune_SIG(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
     '''
     fine tune with B_theta
     # TODO: fine tune with malicious sample
@@ -1527,19 +1527,30 @@ def fine_tune_SIG(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, load
 
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
-                inputs_bd[xx] = add_SIG_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device) 
             inputs = torch.cat((inputs_bd,X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
             inputs, targets = inputs.to(device), targets.to(device)
             X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
             optimizer.zero_grad()
             # make a forward pass
             outputs = model(inputs)
             # calculate the loss
             loss1 = criterion(outputs, targets)
-            outputs2 = model(X_sus)
-            loss2 = -criterion(outputs2, Y_sus)
+            # outputs2 = model(X_sus)
+            # loss2 = -criterion(outputs2, Y_sus)
+
+            if ep_%3==0 and ep_<=8:
+                outputs_bd = model(inputs_bd)
+                loss_bd =criterion(outputs_bd, targets_bd)
+                outputs2 = model(X_sus)
+                loss2 = -criterion(outputs2, Y_sus)
+                loss = loss1+loss2+0.015*loss_bd
+            else:
+                loss = loss1
+
             loss=loss1
             # do a backwards pass
             loss.backward()
@@ -1636,12 +1647,13 @@ def fine_tune_SIG2_CIFAR10(dl_root, model, label_backdoor, B, device, dl_te, dl_
 
             loss = loss1
 
-            if ep_%3==0 and ep_<=8:
-                outputs_bd = model(inputs_bd)
-                loss_bd =criterion(outputs_bd, targets_bd)
+            # if ep_%3==0 and ep_<=8:
+            if ep_<=5:
+                # outputs_bd = model(inputs_bd)
+                # loss_bd =criterion(outputs_bd, targets_bd)
                 outputs2 = model(X_sus)
                 loss2 = -criterion(outputs2, Y_sus)
-                loss = loss1+loss2+0.015*loss_bd
+                loss = loss1+0.015*loss2
             else:
                 loss = loss1
             # do a backwards pass
