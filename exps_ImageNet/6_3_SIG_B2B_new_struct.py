@@ -1,4 +1,5 @@
 # step3 and step4: train B theta ;break up suprious relationships
+# TODO: pay attention: no trasformation for B_\theta training
 
 import sys
 import torch
@@ -46,7 +47,7 @@ bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 bs_tr2 = 128 
 sig_delta = 40; sig_f = 6
 lr_B = 1e-2;epoch_B = 100 
-lr_ft = 1e-4
+lr_ft = 1e-5
 train_B = False 
 B_theta_struct = 'EncoSTN-2' 
 if train_B:
@@ -64,7 +65,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+f'/step1_model_4.pth'))
+model.load_state_dict(torch.load(exp_dir+f'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()

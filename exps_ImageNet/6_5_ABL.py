@@ -32,21 +32,23 @@ def get_next_batch(loader_iter, loader):
     except StopIteration:
         return next(iter(loader))
 
-# ----------------------------------------- 0.0 fix seed
+# ----------------------------------------- 0 fix seed
 # Set the seed for NumPy
 np.random.seed(42)
 # Set the seed for PyTorch
 torch.manual_seed(42)
 
-# ----------------------------------------- 0.1 configs:
+# ----------------------------------------- 1 configs:
 exp_dir = '../experiments/exp7_TinyImageNet/SIG' 
 dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128
 bs_tr2 = 128 # TODO: CHECK THIS 
 sig_delta = 40; sig_f = 6
-lr_ft = 1e-5; epoch_root = 10
+lr_ft = 1e-4; epoch_root = 10
 alpha=0.2
+normalization = utils_defence.get_dataset_normalization(dataset)
+denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -79,15 +81,10 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
-ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
-                                               trigger_indices=ids_p, label_bd=label_backdoor,
-                                               delta=sig_delta, frequency=sig_f)
-dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-    num_workers=0,drop_last=False,
-)
 ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device)
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization)
 
 with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
@@ -103,7 +100,8 @@ print(TP/(TP+FP))
 
 # ----------------------------------------- 1 train B_theta  
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f)
+ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f,
+                                                        norm=normalization, denorm=denormalization)
 
 # B_theta = utils_attack.FixedSTN(input_channels=3, device=device)
 ds_x_root = Subset(ds_tr, ids_root)
@@ -130,8 +128,8 @@ for epoch_ in range(epoch_root):
         Y_root_pred = model(X_root)
         Y_q_pred = model(X_q)
         # calculate the loss
-
         loss = criterion(Y_root_pred, Y_root)-criterion(Y_q_pred, Y_q)
+        loss = criterion(Y_root_pred, Y_root)
         # do a backwards pass
         loss.backward()
         # perform a single optimization step
@@ -141,7 +139,8 @@ for epoch_ in range(epoch_root):
         model.eval()
         ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device) 
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization) 
         ACC.append(ACC_); ASR.append(ASR_)
         torch.save(model.state_dict(), exp_dir+'/'+f'model_sus_cln_{epoch_+1}.pth')
         with open(exp_dir+f'/root_model_clean.pkl', 'wb') as f:

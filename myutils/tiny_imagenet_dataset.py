@@ -9,6 +9,14 @@ from torchvision.datasets import VisionDataset
 from torchvision.datasets.folder import default_loader
 from torchvision.datasets.folder import default_loader
 from torchvision.datasets.utils import extract_archive, check_integrity, download_url, verify_str_arg
+import torch
+import numpy as np
+import random
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 class TinyImageNet(VisionDataset):
@@ -65,6 +73,7 @@ class TinyImageNet(VisionDataset):
         return check_integrity(os.path.join(self.root, self.filename), self.md5)
 
     def __getitem__(self, index):
+        set_seed(42)
         img_path, target = self.data[index]
         image = self.loader(img_path)
 

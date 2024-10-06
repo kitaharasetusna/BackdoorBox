@@ -8,7 +8,13 @@ from torch.utils.data import Subset
 import pickle
 import numpy as np
 import copy
+import random
 from torchvision.transforms.functional import to_pil_image
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 def get_next_batch(loader_iter, loader):
     try:
@@ -1435,8 +1441,9 @@ def fine_tune_BATT2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, lo
         model.train()
 
 # -------------------------------------------------- SIG ATTACK ------------------------------------------
-def add_SIG_trigger(inputs, delta, frequency):
+def add_SIG_trigger(inputs, delta, frequency, norm = None, denorm=None):
     # # Convert tensor to PIL image for rotation
+    inputs = denorm(inputs)
     img = transforms.ToPILImage()(inputs*255)
     img = np.float32(img)
     pattern = np.zeros_like(img)
@@ -1449,15 +1456,18 @@ def add_SIG_trigger(inputs, delta, frequency):
     img = np.uint8(np.clip(img, 0, 255))
     img = Image.fromarray(img)
     inputs = transforms.ToTensor()(img)
+    inputs = norm(inputs)
     return inputs 
 
 class CustomCIFAR10SIG(torch.utils.data.Dataset):
-    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, delta, frequency):
+    def __init__(self, original_dataset, subset_indices, trigger_indices, label_bd, delta, frequency, norm=None, denorm=None):
         self.original_dataset = Subset(original_dataset, subset_indices)
         self.trigger_indices = set(trigger_indices)
         self.bd_label = label_bd
         self.delta = delta
         self.frequency = frequency
+        self.norm = norm
+        self.denorm = denorm
 
     def __len__(self):
         return len(self.original_dataset)
@@ -1470,12 +1480,12 @@ class CustomCIFAR10SIG(torch.utils.data.Dataset):
                                 (0.247, 0.243, 0.261))
         ])
         if original_idx in self.trigger_indices:
-            image = add_SIG_trigger(inputs=image, delta=self.delta, frequency=self.frequency)
+            image = add_SIG_trigger(inputs=image, delta=self.delta, frequency=self.frequency, norm=self.norm, denorm = self.denorm)
             label = self.bd_label
         return image, label
 
 
-def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
+def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device, norm = None, denorm = None):
     transform1 = Compose([
             transforms.Normalize((0.4914, 0.4822, 0.4465),
                                 (0.247, 0.243, 0.261))
@@ -1487,7 +1497,8 @@ def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
             for xx in range(len(inputs_bd)):
                 if targets_bd[xx]!=label_backdoor:
-                    inputs_bd[xx] = add_SIG_trigger(inputs=inputs_bd[xx], delta=delta, frequency=freq)
+                    inputs_bd[xx] = add_SIG_trigger(inputs=inputs_bd[xx], delta=delta, 
+                                                    frequency=freq, norm=norm, denorm=denorm)
                     targets_bd[xx] = label_backdoor
                     bd_num+=1
                 else:
@@ -1508,20 +1519,25 @@ def test_asr_acc_sig(dl_te, model, label_backdoor, delta, freq, device):
 
 
 class CustomCIFAR10SIG_whole(torch.utils.data.Dataset):
-    def __init__(self, original_dataset, trigger_indices, label_bd, delta, freq):
+    def __init__(self, original_dataset, trigger_indices, label_bd, delta, freq, norm=None, denorm=None):
         self.original_dataset = original_dataset 
         self.trigger_indices = set(trigger_indices)
         self.bd_label = label_bd
         self.delta = delta
         self.frequency = freq 
+        self.norm=norm
+        self.denorm=denorm
 
     def __len__(self):
         return len(self.original_dataset)
 
     def __getitem__(self, idx):
+        set_seed(42)
         image, label = self.original_dataset[idx]
         if idx in self.trigger_indices:
-            image = add_SIG_trigger(inputs=image, delta=self.delta, frequency=self.frequency)
+            image = add_SIG_trigger(inputs=image, delta=self.delta, 
+                                    frequency=self.frequency, 
+                                    norm=self.norm, denorm=self.denorm)
             # add_batt_trigger(inputs=image, rotation=self.rotation)
             label = self.bd_label
         return image, label

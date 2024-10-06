@@ -1,5 +1,5 @@
 # 1. train BATT on CIFAR-10
-
+# TODO: fix bug for SIG add 
 
 # step1: train model
 
@@ -33,10 +33,12 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp7_TinyImageNet/SIG' 
 dataset = 'tiny_img'
 label_backdoor = 6
-bs_tr = 128; epoch_SIG = 100; lr_SIG = 3e-4
+bs_tr = 128; epoch_SIG = 10; lr_SIG = 1e-4
 sig_delta = 40; sig_f = 6
 train_detecor = False 
-# ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret
+normalization = utils_defence.get_dataset_normalization(dataset)
+denormalization = utils_defence.get_dataset_denormalization(normalization)
+# ----------------------------------------- 3 prepare model 
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
 device = torch.device("cuda:0")
@@ -47,36 +49,43 @@ model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bi
 model.maxpool = nn.Identity()
 model = model.to(device)
 if not train_detecor:
-    model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
+    model.load_state_dict(torch.load(exp_dir+'/0_checkpoint.pth')['model'])
 optimizer = torch.optim.Adam(model.parameters(), lr=lr_SIG)
 scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5,10,15], gamma=0.1)
 criterion = nn.CrossEntropyLoss()
 
-normalization = utils_defence.get_dataset_normalization(dataset)
-denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
                                 load=True)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
-
 # ----------------------------------------- train model with ISSBA encoder
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
 ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
                                                trigger_indices=ids_p, label_bd=label_backdoor,
-                                               delta=sig_delta, frequency=sig_f)
+                                               delta=sig_delta, frequency=sig_f, norm=normalization,
+                                               denorm=denormalization)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
 
+ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
+                                                   label_backdoor=label_backdoor,
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization) 
+
 model.train()
 ACC = []; ASR= []
+cnt_debug = 0
 for epoch_ in range(epoch_SIG):
     for inputs, targets in dl_x_q:
         inputs, targets = inputs.to(device), targets.to(device)
+        if cnt_debug==0:
+            print(inputs.shape)
+            cnt_debug+=1
         optimizer.zero_grad()
         # make a forward pass
         outputs = model(inputs)
@@ -94,7 +103,8 @@ for epoch_ in range(epoch_SIG):
         # TODO: change this to BATT 
         ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device) 
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization) 
         ACC.append(ACC_); ASR.append(ASR_)
         if not train_detecor:
             torch.save(model.state_dict(), exp_dir+'/'+f'step1_model_{epoch_+1}.pth')

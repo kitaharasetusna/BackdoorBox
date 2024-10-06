@@ -1,4 +1,5 @@
 # step2: pick up malicious samples
+# TODO: fix bug for SIG add 
 
 import sys
 import torch
@@ -44,11 +45,12 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+f'/step1_model_1.pth'))
+model.load_state_dict(torch.load(exp_dir+'/'+f'step1_model_detector.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
-
+normalization = utils_defence.get_dataset_normalization(dataset)
+denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
                                 load=True)
@@ -60,15 +62,14 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
-ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
+ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q,
                                                trigger_indices=ids_p, label_bd=label_backdoor,
-                                               delta=sig_delta, frequency=sig_f)
-dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-    num_workers=0,drop_last=False,
-)
+                                               delta=sig_delta, frequency=sig_f, norm=normalization,
+                                               denorm=denormalization)
 ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device)
+                                                   delta=sig_delta, freq=sig_f, device=device, 
+                                                   norm=normalization, denorm=denormalization)
 # ----------------------------------------- 5. pick up malicious samples 
 from collections import defaultdict
 pick_upX = False 
@@ -85,7 +86,6 @@ if pick_upX:
             tag = 'poison'
         else:
             tag = 'clean'
-        
         print(idx_ori, tag, loss)
         data[idx_ori] = (0, loss)
     print("finish FI collecting")
@@ -93,9 +93,6 @@ if pick_upX:
         pickle.dump(data, f)
     print("finish FI saving")
 else: 
-    # with  open(exp_dir+'/step_2_X_suspicious.pkl', 'rb') as f:
-    #     ids_suspicious= pickle.load(f)
-    # print(len(ids_suspicious))
     with open(exp_dir+'/step_2_X_suspicious_dict.pkl', 'rb') as f:
         data = pickle.load(f)
     # Filter keys with values greater than 27
@@ -118,8 +115,25 @@ else:
             TP+=1
         else:
             FP+=1
-    FN = len(ids_p)-TP if TP< len(ids_p) else 0
-    TN = len(ds_questioned)-FP
-    F1 = 2*TP/(2*TP+FP+FN)
+    FN = len(ids_p)-TP  
     precision = TP/(TP+FP)
-    print(F1, precision)
+    recall = TP/(TP+FN)
+    print(f'recall: {recall}', f'precision: {precision}')
+
+test_idx_suspicious = ids_suspicious[:5]
+ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f, norm=normalization,
+                                                        denorm=denormalization)
+for idx_s in test_idx_suspicious:
+    image, label = ds_whole_poisoned[idx_s]
+    
+    image = image.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image = utils_data.unnormalize(image, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image = image.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image); plt.savefig(exp_dir+f'/ste2_debug_find_sus_{idx_s}.pdf')
+
+    image_clean, label_clean = ds_tr[idx_s]
+    image_clean = image_clean.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image_clean = utils_data.unnormalize(image_clean, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image_clean = image_clean.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image_clean); plt.savefig(exp_dir+f'/ste2_debug_find_clean_{idx_s}.pdf')
+

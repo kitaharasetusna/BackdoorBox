@@ -8,7 +8,13 @@ import hashlib
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+import random
 from myutils import tiny_imagenet_dataset
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 def get_indices_hash(indices):
     indices_bytes = torch.tensor(indices).numpy().tobytes()
@@ -662,22 +668,21 @@ def prepare_ImageNet_datasets_SIG(foloder, load=False, seed=42):
     torch.manual_seed(seed)
     normalize = transforms.Normalize(mean=[0.4802, 0.4481, 0.3975],
                                      std=[0.2302, 0.2265, 0.2262])
+    set_seed(42)
     print("Loading training data")
-    train_transform= Compose([
-        transforms.Resize((64, 64)),
-        transforms.RandomCrop((64, 64), padding=5),
-        transforms.RandomRotation(10),
-        transforms.RandomHorizontalFlip(p=0.5),
-        ToTensor(),
-    ])
-    val_transform = Compose([
-        transforms.Resize((64, 64)),
-        ToTensor(),
-    ]) 
+    train_transform = transforms.Compose([
+                transforms.RandomResizedCrop(64),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ])
     ds_tr = tiny_imagenet_dataset.TinyImageNet('../data', split='train', download=True, transform=train_transform)
     print("Loading validation data")
+    val_transform = transforms.Compose([
+        transforms.ToTensor(),
+        normalize,
+    ])
     ds_te = tiny_imagenet_dataset.TinyImageNet('../data', split='val', download=False, transform=val_transform)
- 
     
     # ---------------------------------------------- st: Get the indices: (root 10%, q 90%->[10% p, 90% cln])
     if load==False:

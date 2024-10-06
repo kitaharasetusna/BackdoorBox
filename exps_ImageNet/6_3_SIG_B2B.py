@@ -177,6 +177,7 @@ else:
             image_, _=ds_x_root[index]; image_c = copy.deepcopy(image_) 
             image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
             tensor_ori = copy.deepcopy(image_).to(device)
+            # TODO: add un-normalize
             image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
 
             encoded_image = utils_attack.add_SIG_trigger(inputs=image_c, delta=sig_delta, frequency=sig_f)
