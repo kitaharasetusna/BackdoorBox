@@ -52,8 +52,8 @@ model.eval()
 normalization = utils_defence.get_dataset_normalization(dataset)
 denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
-ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
-                                load=True)
+ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG_2(foloder=exp_dir,
+                                load=False, target_label=label_backdoor)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
@@ -72,7 +72,7 @@ ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    norm=normalization, denorm=denormalization)
 # ----------------------------------------- 5. pick up malicious samples 
 from collections import defaultdict
-pick_upX = False 
+pick_upX = True 
 if pick_upX:
     data = defaultdict(int)
     print("start FI collecting")

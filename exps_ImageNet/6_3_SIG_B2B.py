@@ -44,8 +44,8 @@ dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 bs_tr2 = 128 
-sig_delta = 1; sig_f = 6
-lr_B = 1e-3;epoch_B = 100 
+sig_delta = 40; sig_f = 6
+lr_B = 1e-3;epoch_B = 5 
 lr_ft = 1e-4
 train_B = False 
 # if train_B:
@@ -63,13 +63,14 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+f'/step1_model_4.pth'))
+model.load_state_dict(torch.load(exp_dir+f'/step1_model_1.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
 model.requires_grad_(False)
 
-
+normalization = utils_defence.get_dataset_normalization(dataset)
+denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
                                 load=True)
@@ -85,19 +86,21 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 )
 ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
                                                trigger_indices=ids_p, label_bd=label_backdoor,
-                                               delta=sig_delta, frequency=sig_f)
+                                               delta=sig_delta, frequency=sig_f,
+                                               norm=normalization, denorm=denormalization)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
 ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device)
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization)
 
 if train_B:
     with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
         idx_sus = pickle.load(f)
 else:
-    with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
+    with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
         idx_sus = pickle.load(f)
 print(len(idx_sus))
 TP, FP = 0.0, 0.0
@@ -110,7 +113,8 @@ print(TP/(TP+FP))
 
 # ----------------------------------------- 1 train B_theta  
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f)
+ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f,
+                                                        norm=normalization, denorm=denormalization)
 
 # B_theta = utils_attack.FixedSTN(input_channels=3, device=device)
 B_theta = utils_attack.Encoder_no()
@@ -120,6 +124,24 @@ dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_worke
 # TODO: change this
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
 dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
+
+# for debugging step 2
+for idx_s in range(5):
+    # TODO: in BvB debug print, use the same index
+    image, label = ds_sus[idx_s]
+    image = image.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image = utils_data.unnormalize(image, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image = image.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image); plt.savefig(exp_dir+f'/step4_debug_find_sus_{idx_s}.pdf')
+
+# for debugging step 2
+for idx_root in range(5):
+    # TODO: in BvB debug print, use the same index
+    image, label = ds_x_root[idx_root]
+    image = image.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image = utils_data.unnormalize(image, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image = image.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image); plt.savefig(exp_dir+f'/step4_debug_root_{idx_root}.pdf')
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
@@ -133,8 +155,6 @@ def relu_(x, threshold=0.5):
         return torch.tensor(0.0)
 
 if train_B:
-    pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
-    B_theta.load_state_dict(torch.load(pth_path))
     for epoch_ in range(epoch_B):
         loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
         for i in range(max(len(dl_root), len(dl_sus))):
@@ -150,21 +170,20 @@ if train_B:
             logits_root = model(B_root); logits_q = model(X_q)
             los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
             los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
-            # lpips_loss_op = loss_fn_alex(X_root, B_root)
-            # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
-            loss = 2*los_mse + los_logits
             
+            #TODO: compare the mse we have and the per-sample mse sig has
+            loss = los_logits+los_mse
             # loss = los_logits
           
             loss.backward()
             optimizer.step()
             loss_mse_sum+=los_mse.item(); loss_logits_sum+=los_logits.item(); loss_inf_sum+=los_inf.item()
         print(f'epoch: {epoch_}')
-        print(f'loss mse: {loss_mse_sum/len(dl_sus): .2f}')
+        print(f'loss mse: {loss_mse_sum/len(ds_sus): .2f}')
         print(f'loss logits: {loss_logits_sum/len(dl_sus): .2f}')
         print(f'loss inf: {loss_inf_sum/len(dl_sus): .2f}')
         if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
-            utils_attack.test_asr_acc_BATT_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+            utils_attack.test_asr_acc_BATT_gen_residual(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                 B=B_theta, device=device) 
             torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
 else:
@@ -172,29 +191,38 @@ else:
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
+    utils_attack.test_asr_acc_BATT_gen_residual(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                B=B_theta, device=device) 
     for index in [100, 200, 300, 400, 500, 600]:
         with torch.no_grad(): 
-            image_, _=ds_x_root[index]; image_c = copy.deepcopy(image_) 
-            image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_)
+            image_, _=ds_x_root[index]; image_single = copy.deepcopy(image_) 
+            image_ = image_.to(device).unsqueeze(0); image_batch = copy.deepcopy(image_)
             tensor_ori = copy.deepcopy(image_).to(device)
-            # TODO: add un-normalize
-            image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0)) ;plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
-
-            encoded_image = utils_attack.add_SIG_trigger(inputs=image_c, delta=sig_delta, frequency=sig_f)
-            tensor_badnet = copy.deepcopy(encoded_image).to(device)
-            issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
-            plt.imshow(issba_image)
+            image_ = utils_data.unnormalize(image_, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+            image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+            plt.imshow(image_);plt.savefig(exp_dir+f'/ori_{index}.pdf')
+            
+            image_sig = utils_attack.add_SIG_trigger(inputs=image_single, delta=sig_delta, frequency=sig_f, norm=normalization,
+                                                         denorm=denormalization)
+            tensor_sig = copy.deepcopy(image_sig).to(device)
+            image_sig = image_sig.to(device).unsqueeze(0)
+            image_sig = utils_data.unnormalize(image_sig, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+            image_sig = image_sig.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+            plt.imshow(image_sig)
             plt.savefig(exp_dir+f'/SIG_{index}.pdf')
 
-            encoded_image = B_theta(image)
-            tensor_gen = copy.deepcopy(encoded_image).to(device)
-            issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
-            plt.imshow(issba_image)
+            image_bvb = B_theta(image_batch)
+            tensor_bvb = copy.deepcopy(image_bvb).to(device)
+            # TODO: add un-normalize
+            image_bvb = image_bvb.to(device)
+            image_bvb = utils_data.unnormalize(image_bvb, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+            image_bvb = image_bvb.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+            plt.imshow(image_bvb)
             plt.savefig(exp_dir+f'/generated_{index}.pdf')
 
-            norm_ori_bad = comp_inf_norm(tensor_ori, tensor_badnet)
-            norm_ori_gen = comp_inf_norm(tensor_ori, tensor_gen)
-            norm_bad_gen = comp_inf_norm(tensor_gen, tensor_badnet)
+            norm_ori_bad = comp_inf_norm(tensor_ori, tensor_sig)
+            norm_ori_gen = comp_inf_norm(tensor_ori, tensor_bvb)
+            norm_bad_gen = comp_inf_norm(tensor_bvb, tensor_sig)
             print(f'ori-bad: {norm_ori_bad}, ori-gen: {norm_ori_gen}, gen-bad: {norm_bad_gen}')
             
     for param in model.parameters():
@@ -208,6 +236,7 @@ else:
                                 B=B_theta, device=device, dl_te=dl_te, delta=sig_delta,
                                 freq=sig_f, 
                                 epoch=10, optimizer=optimizer, criterion=criterion,
-                                dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
+                                dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus)
+                                ,norm=normalization, denorm=denormalization)
 
 

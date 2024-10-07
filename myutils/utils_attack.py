@@ -1264,6 +1264,19 @@ def add_BATT_gen(inputs, B, device):
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0)
 
+def add_BATT_sig_non(inputs, B, device):
+    image_input= inputs.to(device)
+    encoded_image = B(image_input) 
+    # encoded_image = encoded_image.clamp(0, 1)
+    return encoded_image.squeeze(0)
+
+def add_BATT_gen_residual(inputs, B, device):
+    image_input= inputs.to(device)
+    encoded_image = B(image_input) 
+    # encoded_image = encoded_image.clamp(0, 1)
+    return encoded_image.squeeze(0)
+
+
 def add_SIG_gen(inputs, B, device):
     image_input= inputs.to(device)
     encoded_image = B(image_input) 
@@ -1304,6 +1317,36 @@ def test_asr_acc_BATT_gen(dl_te, model, label_backdoor, B, device):
         ACC = 100.00 * float(cln_correct) / cln_num
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
+
+def test_asr_acc_BATT_gen_residual(dl_te, model, label_backdoor, B, device):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    # TODO: to B
+                    inputs_bd[xx] = add_BATT_gen_residual(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                      B=B, device=device) 
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        return ACC, ASR
+
 
 def test_asr_acc_BATT_gen_2(dl_te, model, label_backdoor, B, device):
     model.eval()
@@ -1543,7 +1586,7 @@ class CustomCIFAR10SIG_whole(torch.utils.data.Dataset):
         return image, label
 
 
-def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion, norm=None, denorm=None):
     '''
     fine tune with B_theta
     # TODO: fine tune with malicious sample
@@ -1556,7 +1599,7 @@ def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_
 
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
-                inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
+                inputs_bd[xx] = add_BATT_sig_non(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device) 
             inputs = torch.cat((inputs_bd,X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
@@ -1571,14 +1614,9 @@ def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_
             # outputs2 = model(X_sus)
             # loss2 = -criterion(outputs2, Y_sus)
 
-            if ep_%3==0 and ep_<=1:
-                outputs_bd = model(inputs_bd)
-                loss_bd =criterion(outputs_bd, targets_bd)
-                outputs2 = model(X_sus)
-                loss2 = -criterion(outputs2, Y_sus)
-                loss = loss1+loss_bd+0.015*loss2
-            else:
-                loss = loss1
+            outputs_bd = model(inputs_bd)
+            loss_bd =criterion(outputs_bd, targets_bd)
+            loss = 0.5*loss1+0.5*loss_bd
 
             loss=loss1
             # do a backwards pass
@@ -1587,7 +1625,8 @@ def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_
             optimizer.step()
         print(f'epoch: {ep_+1}')
         ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
-                                                    freq=freq, delta=delta, device=device)
+                                                    freq=freq, delta=delta, device=device,
+                                                    norm=norm, denorm=denorm)
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
 

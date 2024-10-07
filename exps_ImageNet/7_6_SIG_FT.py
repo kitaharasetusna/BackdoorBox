@@ -39,7 +39,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 bs_tr2 = 128
 sig_delta = 40; sig_f = 6
-lr_root = 1e-4; epoch_root = 10
+lr_root = 3e-4; epoch_root = 10
 normalization = utils_defence.get_dataset_normalization(dataset)
 denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 1 train B_theta  
@@ -54,7 +54,7 @@ model = torchvision.models.get_model('resnet18', num_classes=200)
 model.conv1 = nn.Conv2d(3,64, kernel_size=(3,3), stride=(1,1), padding=(1,1), bias=False)
 model.maxpool = nn.Identity()
 model = model.to(device)
-model.load_state_dict(torch.load(exp_dir+'/step1_model_1.pth'))
+model.load_state_dict(torch.load(exp_dir+'/step1_model_10.pth'))
 criterion = nn.CrossEntropyLoss()
 
 model.eval()
@@ -62,8 +62,8 @@ model.requires_grad_(False)
 
 
 # ----------------------------------------- 0.3 prepare data X_root X_questioned
-ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG(foloder=exp_dir,
-                                load=True)
+ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_ImageNet_datasets_SIG_2(foloder=exp_dir,
+                                load=True, target_label=label_backdoor)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"

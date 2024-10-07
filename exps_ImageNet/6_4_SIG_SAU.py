@@ -40,12 +40,14 @@ bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-3
 bs_tr2 = 128
 sig_delta = 40; sig_f = 6
 lr_B = 1e-3;epoch_B = 100 
-lr_root = 1e-5; epoch_root = 10
+lr_root = 1e-2; epoch_root = 10
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
 lmd_1 = 1; lmd_2 = 0.0; lmd_3 = 1
 alpha = 0.2
+normalization = utils_defence.get_dataset_normalization(dataset)
+denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 1 train B_theta  
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -78,13 +80,15 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 )
 ds_questioned = utils_attack.CustomCIFAR10SIG(original_dataset=ds_tr, subset_indices=ids_q+ids_root,
                                                trigger_indices=ids_p, label_bd=label_backdoor,
-                                               delta=sig_delta, frequency=sig_f)
+                                               delta=sig_delta, frequency=sig_f, norm=normalization,
+                                               denorm=denormalization)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
 ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device)
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization)
 
 # if train_B:
 #     with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
@@ -103,7 +107,8 @@ print(TP/(TP+FP))
 # ----------------------------------------- 1 train B_theta  
 
 # prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f)
+ds_whole_poisoned = utils_attack.CustomCIFAR10SIG_whole(ds_tr, ids_p, label_backdoor, sig_delta, sig_f,
+                                                        norm=normalization, denorm=denormalization)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
 # TODO: change this
@@ -220,4 +225,5 @@ for round in range(epoch_root):
             del logits, logits_ref, per_logits, per_logits_ref, loss_cl, loss_at, loss_shared, loss
     ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
-                                                   delta=sig_delta, freq=sig_f, device=device) 
+                                                   delta=sig_delta, freq=sig_f, device=device,
+                                                   norm=normalization, denorm=denormalization) 

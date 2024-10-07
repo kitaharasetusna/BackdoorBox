@@ -77,6 +77,9 @@ print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)},
 assert len(ids_root)+len(ids_q)==len(ds_tr), f"root len: {len(ids_root)}+ questioned len: {len(ids_q)} != {len(ds_tr)}"
 assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len: {len(ids_cln)} != {len(ids_q)}"
 
+for idx_root in ids_root:
+    if idx_root in ids_p:
+        print('False!')
 # ----------------------------------------- train model with ISSBA encoder
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
@@ -114,6 +117,24 @@ loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus)
 optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
 print(len(ds_sus), len(ds_x_root))
 
+# for debugging step 2
+for idx_s in range(5):
+    # TODO: in BvB debug print, use the same index
+    image, label = ds_sus[idx_s]
+    image = image.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image = utils_data.unnormalize(image, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image = image.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image); plt.savefig(exp_dir+f'/step3_debug_find_sus_{idx_s}.pdf')
+
+# for debugging step 2
+for idx_root in range(5):
+    # TODO: in BvB debug print, use the same index
+    image, label = ds_x_root[idx_root]
+    image = image.to(device).unsqueeze(0) #(1, 3, 64, 64)
+    image = utils_data.unnormalize(image, mean=[0.4802, 0.4481, 0.3975], std=[0.2302, 0.2265, 0.2262])
+    image = image.squeeze().cpu().numpy().transpose((1, 2, 0))
+    plt.imshow(image); plt.savefig(exp_dir+f'/step3_debug_root_{idx_root}.pdf')
+
 
 model.train(); model.requires_grad_(True)
 ACC = []; ASR= []
@@ -126,10 +147,10 @@ for epoch_ in range(epoch_root):
         optimizer.zero_grad()
         # make a forward pass
         Y_root_pred = model(X_root)
-        Y_q_pred = model(X_q)
         # calculate the loss
+        Y_q_pred = model(X_q)
         loss = criterion(Y_root_pred, Y_root)-criterion(Y_q_pred, Y_q)
-        loss = criterion(Y_root_pred, Y_root)
+        
         # do a backwards pass
         loss.backward()
         # perform a single optimization step
