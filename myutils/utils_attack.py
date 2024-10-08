@@ -522,6 +522,42 @@ def fine_tune_ISSBA(dl_root, model, label_backdoor, B, device, dl_te, epoch, sec
                                         secret=secret, encoder=encoder, device=device) 
         test_acc(dl_te=dl_root, model=model, device=device)
 
+
+def fine_tune_ISSBA_CIFAR10_new_struct(dl_root, model, label_backdoor, B, device, dl_te, epoch, secret, encoder, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    for ep_ in range(epoch):
+        for inputs, targets in dl_root:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if B:
+                    inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                                        B=B, device=device) 
+                else:
+                    torch.manual_seed(ep_)
+                    inputs_bd[xx] = torch.rand(3, 32, 32)
+            inputs = torch.cat((inputs_bd,inputs), dim=0)
+            targets = torch.cat((targets_bd, targets))
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss = criterion(outputs, targets)
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder, device=device) 
+        test_acc(dl_te=dl_root, model=model, device=device)
+
+
 def fine_tune_Badnet(dl_root, model, label_backdoor, B, device, dl_te, epoch, triggerX, triggerY, optimizer, criterion):
     '''
     fine tune with B_theta
@@ -584,6 +620,52 @@ def fine_tune_Badnet2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
                 loss=loss1+0.01*loss2
             else:
                 loss=loss1
+            # loss=loss1
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                         triggerX=triggerX, triggerY=triggerY, device=device) 
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
+
+
+def fine_tune_Badnet_CIFAR10_new_struct(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, triggerX, triggerY, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                if B:
+                    inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                                        B=B, device=device) 
+                else:
+                    torch.manual_seed(ep_)
+                    inputs_bd[xx] = inputs_bd[xx]+torch.rand(3, 32, 32)
+            inputs = torch.cat((inputs_bd,X_root), dim=0)
+            targets = torch.cat((targets_bd, Y_root))
+            inputs, targets = inputs.to(device), targets.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            outputs2 = model(X_sus)
+            loss2 = -criterion(outputs2, Y_sus)
+            
+            loss=loss1
             # loss=loss1
             # do a backwards pass
             loss.backward()
@@ -1114,6 +1196,56 @@ def fine_tune_BATT2_3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
         model.train()
 
 
+def fine_tune_BATT2_CIFAR10_random(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, rotation, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    rotation=rotation, device=device) 
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = inputs_bd[xx]+torch.rand(3, 32, 32)  
+                # `add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
+                #                                         B=B, device=device) `
+            inputs = X_root 
+            targets = Y_root 
+            
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            outputs_bd = model(inputs_bd)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            outputs2 = model(X_sus)
+            loss2 = -criterion(outputs2, Y_sus)
+            loss_bd = criterion(outputs_bd, targets_bd)
+            loss=loss1+loss_bd
+            if ep_ >=5:
+                loss=loss1+loss_bd+0.015*loss2
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        # ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+        #                                  triggerX=triggerX, triggerY=triggerY, device=device) 
+        ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    rotation=rotation, device=device) 
+        model.train()
+
+
 def fine_tune_Blended3(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, pattern, optimizer, criterion, alpha=0.2):
     '''
     fine tune with B_theta
@@ -1486,7 +1618,8 @@ def fine_tune_BATT2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, lo
 # -------------------------------------------------- SIG ATTACK ------------------------------------------
 def add_SIG_trigger(inputs, delta, frequency, norm = None, denorm=None):
     # # Convert tensor to PIL image for rotation
-    inputs = denorm(inputs)
+    if denorm:
+        inputs = denorm(inputs)
     img = transforms.ToPILImage()(inputs*255)
     img = np.float32(img)
     pattern = np.zeros_like(img)
@@ -1499,7 +1632,8 @@ def add_SIG_trigger(inputs, delta, frequency, norm = None, denorm=None):
     img = np.uint8(np.clip(img, 0, 255))
     img = Image.fromarray(img)
     inputs = transforms.ToTensor()(img)
-    inputs = norm(inputs)
+    if denorm:
+        inputs = norm(inputs)
     return inputs 
 
 class CustomCIFAR10SIG(torch.utils.data.Dataset):
@@ -1592,33 +1726,36 @@ def fine_tune_SIG_tiny_Img(dl_root, model, label_backdoor, B, device, dl_te, dl_
     # TODO: fine tune with malicious sample
     '''
     model.train()
+    cnt_ =0
     for ep_ in range(epoch):
         for i in range(max(len(dl_root), len(dl_sus))):
             X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
             X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+            if cnt_==0:
+                print(X_root.shape)
+                cnt_+=1
 
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
                 inputs_bd[xx] = add_BATT_sig_non(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device) 
-            inputs = torch.cat((inputs_bd,X_root), dim=0)
-            targets = torch.cat((targets_bd, Y_root))
-            inputs, targets = inputs.to(device), targets.to(device)
+            
+            inputs, targets = X_root.to(device), Y_root.to(device)
             X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
             inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
             optimizer.zero_grad()
             # make a forward pass
-            outputs = model(inputs)
-            # calculate the loss
-            loss1 = criterion(outputs, targets)
-            # outputs2 = model(X_sus)
-            # loss2 = -criterion(outputs2, Y_sus)
+            outputs = model(inputs); loss1 = criterion(outputs, targets)
 
-            outputs_bd = model(inputs_bd)
-            loss_bd =criterion(outputs_bd, targets_bd)
-            loss = 0.5*loss1+0.5*loss_bd
+            
+            if ep_%3==0 and ep_<=5:
+                outputs_bd = model(inputs_bd); outputs_sus = model(X_sus)
+                loss2 = -criterion(outputs_sus, Y_sus) 
+                loss_bd =criterion(outputs_bd, targets_bd)
+                loss = loss1+0.0001*loss_bd+0.0001*loss2
+            else:
+                loss = loss1
 
-            loss=loss1
             # do a backwards pass
             loss.backward()
             # perform a single optimization step
@@ -1701,6 +1838,59 @@ def fine_tune_SIG2_CIFAR10(dl_root, model, label_backdoor, B, device, dl_te, dl_
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
             for xx in range(len(inputs_bd)):
                 inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), B=B, device=device) 
+            
+
+            inputs, targets = inputs.to(device), targets.to(device)
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            X_sus, Y_sus = X_sus.to(device), Y_sus.to(device)
+            
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs); 
+            
+            loss1 = criterion(outputs, targets); 
+
+            loss = loss1
+
+            # if ep_%3==0 and ep_<=8:
+            if ep_<=5:
+                # outputs_bd = model(inputs_bd)
+                # loss_bd =criterion(outputs_bd, targets_bd)
+                outputs2 = model(X_sus)
+                loss2 = -criterion(outputs2, Y_sus)
+                loss = loss1+0.015*loss2
+            else:
+                loss = loss1
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    freq=freq, delta=delta, device=device)
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
+
+
+def fine_tune_SIG2_CIFAR10_random(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, delta, freq, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    ACC_, ASR_ = test_asr_acc_sig(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                                    freq=freq, delta=delta, device=device)
+    model.train()
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            inputs, targets = get_next_batch(loader_root_iter, dl_root)
+            X_sus, Y_sus = get_next_batch(loader_sus_iter, dl_sus)
+
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if B==None:
+                    inputs_bd[xx] = inputs_bd[xx]+torch.rand(3, 32, 32)
+                else:
+                    inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), B=B, device=device) 
             
 
             inputs, targets = inputs.to(device), targets.to(device)

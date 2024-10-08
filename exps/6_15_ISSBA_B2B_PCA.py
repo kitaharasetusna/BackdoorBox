@@ -24,13 +24,6 @@ from torchvision import transforms
 import torchvision
 from torchvision.transforms.functional import normalize, resize, to_pil_image
 
-# Helper function to reset iterator if needed
-def get_next_batch(loader_iter, loader):
-    try:
-        return next(loader_iter)
-    except StopIteration:
-        return next(iter(loader))
-
 # ----------------------------------------- 0.0 fix seed
 # Set the seed for NumPy
 np.random.seed(42)
@@ -41,7 +34,6 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/ISSBA' 
 secret_size = 20; label_backdoor = 6 
 bs_tr = 128
-epoch_B = 10; lr_B = 1e-4; lr_ft = 1e-4
 # ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
 # make a directory for experimental results
 os.makedirs(exp_dir, exist_ok=True)
@@ -73,9 +65,7 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 
 ds_questioned = utils_attack.CustomCIFAR10ISSBA(
     ds_tr, ids_q, ids_p, label_backdoor, secret, encoder_issba, device)
-# dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-#     num_workers=0,drop_last=False,
-# )
+
 dl_te = DataLoader(dataset= ds_te,batch_size=256,shuffle=False,
     num_workers=0, drop_last=False
 )
@@ -96,31 +86,16 @@ for s in idx_sus:
         FP+=1
 print(TP/(TP+FP))
 
-# ----------------------------------------- 1 train B_theta  
-# prepare B
-ds_whole_poisoned = utils_attack.CustomCIFAR10ISSBA_whole(ds_tr, ids_p, label_backdoor, secret, encoder_issba, device)
-
-
+# ----------------------------------------- 1. load B_\theta
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
-ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
-# TODO: change this
-ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=False)
-
-loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
-optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
-
 train_B = False
 pth_path = exp_dir+'/'+f'B_theta_{10}.pth'
 B_theta.load_state_dict(torch.load(pth_path))
-B_theta_ori = utils_attack.Encoder_no(); B_theta_ori = B_theta_ori.to(device)
-
-# # Example data: Two 10-dimensional lists
-# data = np.array([
-#     [0.1, 0.1, 0.1, 0.2, 0.0, 0.1, 0.1, 0.1, 0.1, 0.1],  # First 10-dimensional point
-#     [0.1, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0]   # Second 10-dimensional point
-# ])
+B_theta.eval(); B_theta.requires_grad_(False)
+B_theta_ori = utils_attack.EncoderWithFixedTransformation_2(input_channels=3, device=device)
+# B_theta_ori = utils_attack.Encoder_no(); 
+B_theta_ori = B_theta_ori.to(device)
+B_theta_ori.eval(); B_theta_ori.requires_grad_(False)
 
 # Collect predicted labels
 all_preds = []; all_logits = []
@@ -134,7 +109,7 @@ with torch.no_grad():
             gen_images[xx] = utils_attack.add_ISSBA_gen(inputs=gen_images[xx], 
                                                         B=B_theta, device=device) 
         for xx in range(len(gen_images_ori)):
-            gen_images_ori[xx] = utils_attack.add_ISSBA_gen(inputs=gen_images_ori[xx], 
+            gen_images_ori[xx] = utils_attack.add_BATT_gen_2(inputs=gen_images_ori[xx].unsqueeze(0), 
                                                         B=B_theta_ori, device=device) 
         for xx in range(len(mali_images)):
             mali_images[xx] = utils_attack.add_ISSBA_trigger(inputs=mali_images[xx],
@@ -151,10 +126,7 @@ with torch.no_grad():
         all_preds.extend(predicted.cpu().numpy())
         all_logits.extend(outputs.cpu().numpy())
 
-# # Step 1: Apply PCA for dimensionality reduction (2 components)
-# all_logits = np.array(all_logits)
-# print(all_logits.shape)
-# torch.save(all_logits, exp_dir+'/ndarray.pth')
+
 all_dis_ran = torch.cat(dis_bd_ran)
 avg_dis_gen_ori = torch.mean(all_dis_ran).item()
 print(avg_dis_gen_ori, 'ran-mali')
