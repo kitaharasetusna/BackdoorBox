@@ -4,7 +4,7 @@ import csv
 # attacks_ =['ISSBA', 'WaNet','BATT', 'Blended']
 attacks_ =['SIG']
 for attack in attacks_:
-    exp_dir = f'../experiments/exp6_FI_B/{attack}/' 
+    exp_dir = f'../experiments/exp7_TinyImageNet/{attack}/' 
     # csv_file = '/ABL_BATT'
     # files_ = ['1_B2B', '2_ABL', '3_SAU', '4_FT']
     files_ = ['1_B2B', '3_ABL', '4_SAU', '2_FT']

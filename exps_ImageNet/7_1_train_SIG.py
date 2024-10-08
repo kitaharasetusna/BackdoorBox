@@ -35,7 +35,7 @@ dataset = 'tiny_img'
 label_backdoor = 6
 bs_tr = 128; epoch_SIG = 10; lr_SIG = 1e-4
 sig_delta = 40; sig_f = 6
-train_detecor = False 
+train_detecor = True 
 normalization = utils_defence.get_dataset_normalization(dataset)
 denormalization = utils_defence.get_dataset_denormalization(normalization)
 # ----------------------------------------- 3 prepare model 

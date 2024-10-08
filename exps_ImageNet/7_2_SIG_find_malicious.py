@@ -35,7 +35,7 @@ label_backdoor = 6
 bs_tr = 128; epoch_SIG = 100; lr_SIG = 1e-4
 sig_delta = 40; sig_f = 6
 os.makedirs(exp_dir, exist_ok=True)
-get_smaller_idx = False 
+get_smaller_idx = True 
 # -----------------------------------------3 dirs, load model
 
 device = torch.device("cuda:0")
@@ -72,7 +72,7 @@ ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    norm=normalization, denorm=denormalization)
 # ----------------------------------------- 5. pick up malicious samples 
 from collections import defaultdict
-pick_upX = True 
+pick_upX = False 
 if pick_upX:
     data = defaultdict(int)
     print("start FI collecting")
@@ -103,7 +103,7 @@ else:
         with open(exp_dir+'/idx_suspicious.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)
     else:
-        top_10_percent_count = max(1, int(len(sorted_items) * 1 // 500))
+        top_10_percent_count = max(1, int(len(sorted_items) * 1 //2000))
         ids_suspicious = [item[0] for item in sorted_items[:top_10_percent_count]]
         with open(exp_dir+'/idx_suspicious2.pkl', 'wb') as f:
             pickle.dump(ids_suspicious, f)
