@@ -417,3 +417,14 @@ def grad_cam(model, image_tensor, image, class_index=None, device=None, index = 
     # Display it
     plt.imshow(result); plt.axis('off'); plt.tight_layout()
     plt.savefig(f'{exp_dir}/{title_}_index_{index}_predicted_{predicted_label}_gt_{class_index}.pdf')
+
+
+def test_f1_score(idx_sus, ids_p):
+    print(f'index lenght: {len(idx_sus)}')
+    TP, FP = 0.0, 0.0
+    for s in idx_sus:
+        if s in ids_p:
+            TP+=1
+        else:
+            FP+=1
+    print(TP/(TP+FP))

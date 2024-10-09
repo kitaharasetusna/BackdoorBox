@@ -23,22 +23,24 @@ import core
 from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminator
 from myutils import utils_data, utils_attack, utils_defence
 
-
-# ----------------------------------------- fix seed
+# ----------------------------------------- 1 fix seed
 # Set the seed for NumPy
 np.random.seed(42)
 # Set the seed for PyTorch
 torch.manual_seed(42)
 
-# ----------------------------------------- configs:
+# ----------------------------------------- 2 configs:
 exp_dir = '../experiments/exp6_FI_B/ISSBA_abl' 
 secret_size = 20; label_backdoor = 6 
 bs_tr = 128
-# ----------------------------------------- mkdirs, load ISSBA_encoder+secret+model f'
+# ----------------------------------------- 3 mkdirs, load ISSBA_encoder+secret+model f'
+print("*"*8+"make dir"+"*"*8)
 # make a directory for experimental results
-os.makedirs(exp_dir, exist_ok=True); import sys; sys.exit()
+os.makedirs(exp_dir, exist_ok=True)
+print("*"*8+"xxxx xxxx "+"*"*8)
+print("")
 # -----------------------------------------
-
+print("*"*8+"load model"+"*"*8)
 device = torch.device("cuda:0")
 # Load ISSBA encoder
 encoder_issba = StegaStampEncoder(
@@ -56,8 +58,10 @@ criterion = nn.CrossEntropyLoss()
 encoder_issba.eval(); model.eval()
 encoder_issba.requires_grad_(False); model.requires_grad_(False)
 
-
-# ----------------------------------------- 0.3 prepare data X_root X_questioned
+print("*"*8+"xxxx xxxx"+"*"*8)
+print("")
+# ----------------------------------------- 4 prepare data X_root X_questioned
+print("*"*8+"load data"+"*"*8)
 ds_tr, ds_te, ids_root, ids_q, ids_p, ids_cln = utils_data.prepare_CIFAR10_datasets_2(foloder=exp_dir,
                                 load=True)
 print(f"root: {len(ids_root)}, questioned: {len(ids_q)}, poisoned: {len(ids_p)}, clean: {len(ids_cln)}")
@@ -67,26 +71,30 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 ds_questioned = utils_attack.CustomCIFAR10ISSBA(
     ds_tr, ids_q, ids_p, label_backdoor, secret, encoder_issba, device)
 
-dl_te = DataLoader(dataset= ds_te,batch_size=256,shuffle=False,
+dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
+print("*"*8+"xxxx xxxx"+"*"*8)
+print("")
 
-# ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
-#                                         secret=secret, encoder=encoder_issba, device=device)
-
-
-# -------------------------------------------------- A. show Grad-CAM: bd1  ------------------------------------------------
+print("*"*8+"test model"+"*"*8)
+ACC_, ASR_ = utils_attack.test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder_issba, device=device)
+print("*"*8+"xxxx   xxxx"+"*"*8)
+print("")
+# -------------------------------------------------- test F1 scofe  ------------------------------------------------
+print("*"*8+"test f1 score"+"*"*8)
 model.requires_grad_(False)
-with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
+with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
-TP, FP = 0.0, 0.0
-for s in idx_sus:
-    if s in ids_p:
-        TP+=1
-    else:
-        FP+=1
-print(TP/(TP+FP))
+    utils_defence.test_f1_score(idx_sus=idx_sus, ids_p=ids_p)
 
+with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f2:
+    idx_sus_smaller = pickle.load(f2)
+    utils_defence.test_f1_score(idx_sus=idx_sus_smaller, ids_p=ids_p)
+print("*"*8+"xxxx   xxxx"+"*"*8)
+print("")
+import sys; sys.exit()
 # ----------------------------------------- 1. load B_\theta
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 train_B = False
