@@ -23,64 +23,26 @@ def comp_inf_norm(A, B):
     infinity_norm = torch.max(torch.abs(A - B))
     return infinity_norm
 
-# Helper function to reset iterator if needed
 def get_next_batch(loader_iter, loader):
     try:
         return next(loader_iter)
     except StopIteration:
         return next(iter(loader))
-
-
-def get_train_fim_ISSBA(model, dl_train, encoder, secret, ratio_poison, bs_tr, device):
-    ''' get FIM while training on training data
-        returns:
-            avg_trace_fim, avg_trace_fim_bd, avg_loss, avg_loss_bd 
-            
-    '''
-    num_poison = int(ratio_poison*bs_tr)
-    avg_trace_fim = 0.0; avg_trace_fim_bd = 0.0; avg_loss = 0.0; avg_loss_bd = 0.0
-    cln_num = 0; bd_num = 0
-    for images, labels in dl_train:
-        cln_num+=(bs_tr-num_poison); bd_num+=num_poison
-        trace_fim_cln, loss_cln = utils_defence.compute_fisher_information(model, images[num_poison:], 
-                                                                labels[num_poison:], criterion,
-                                                                device= device, loss_=True)
-        avg_trace_fim += trace_fim_cln; avg_loss+=loss_cln
-        inputs_bd, targets_bd = copy.deepcopy(images), copy.deepcopy(labels)
-        for xx in range(num_poison):
-            inputs_bd[xx] = utils_attack.add_ISSBA_trigger(inputs=inputs_bd[xx], secret=secret,
-                                                           encoder=encoder, device=device)
-            # inputs_bd[xx] = utils_attack.add_badnet_trigger(inputs=inputs_bd[xx], triggerY=triggerY,
-            #                                                 triggerX=triggerX) 
-            targets_bd[xx] = label_backdoor
-        trace_fim_bd, loss_bd = utils_defence.compute_fisher_information(model, inputs_bd[:num_poison], 
-                                                                    targets_bd[:num_poison], criterion,
-                                                                    device=device, loss_=True)
-        avg_trace_fim_bd += trace_fim_bd; avg_loss_bd+=loss_bd
-    avg_trace_fim = avg_trace_fim/(1.0*cln_num); avg_trace_fim_bd = avg_trace_fim_bd/(1.0*bd_num)
-    avg_loss = avg_loss/(1.0*cln_num); avg_loss_bd = avg_loss_bd/(1.0*bd_num)
-    print(f'fim clean: {avg_trace_fim: .2f}')
-    print(f'fim bd: {avg_trace_fim_bd: .2f}')   
-    print(f'loss clean: {avg_loss: 2f}')
-    print(f'loss bd: {avg_loss_bd: .2f}')
-    return avg_trace_fim, avg_trace_fim_bd, avg_loss, avg_loss_bd
-
-# ----------------------------------------- 0.0 fix seed
+# ----------------------------------------- fix seed
 # Set the seed for NumPy
 np.random.seed(42)
 # Set the seed for PyTorch
 torch.manual_seed(42)
 
-# ----------------------------------------- 0.1 configs:
-exp_dir = '../experiments/exp6_FI_B/Badnet' 
+# ----------------------------------------- configs:
+exp_dir = '../experiments/exp6_FI_B/Badnet_abl' 
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
-bs_tr2 = 50 
-lr_B = 1e-4;epoch_B = 50 
-lr_ft = 1e-4
-RANDOM_B = False 
-# ----------------------------------------- 0.2 dirs, load ISSBA_encoder+secret+model f'
-# make a directory for experimental results
+lr_B = 1e-2;epoch_B = 50 
+lr_ft = 2e-4; epoch_=20
+RANDOM_B = True 
+train_B = False 
+# ----------------------------------------- mkdirs, load ISSBA_encoder+secret+model f'
 os.makedirs(exp_dir, exist_ok=True)
 
 device = torch.device("cuda:0")
@@ -102,9 +64,7 @@ assert len(ids_p)+len(ids_cln)==len(ids_q), f"poison len: {len(ids_p)}+ cln len:
 
 ds_questioned = utils_attack.CustomCIFAR10Badnet(
     ds_tr, ids_q, ids_p, label_backdoor, triggerY=triggerY, triggerX=triggerX)
-# dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
-#     num_workers=0,drop_last=False,
-# )
+
 dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
     num_workers=0, drop_last=False
 )
@@ -113,7 +73,7 @@ ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device)  
 
-with open(exp_dir+'/idx_suspicious2.pkl', 'rb') as f:
+with open(exp_dir+'/idx_suspicious.pkl', 'rb') as f:
     idx_sus = pickle.load(f)
 TP, FP = 0.0, 0.0
 for s in idx_sus:
@@ -121,7 +81,7 @@ for s in idx_sus:
         TP+=1
     else:
         FP+=1
-print(TP/(TP+FP))
+print(f'D_[sus] size: {len(idx_sus)}; precision: {TP/(TP+FP)}')
 
 # ----------------------------------------- 1 train B_theta  
 # prepare B
@@ -131,24 +91,15 @@ ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_b
 
 B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
-dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
-# TODO: change this
+dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
-dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr2,shuffle=True,num_workers=0,drop_last=True)
+dl_sus = DataLoader(dataset= ds_sus,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 
 loader_root_iter = iter(dl_root); loader_sus_iter = iter(dl_sus) 
 optimizer = torch.optim.Adam(B_theta.parameters(), lr=lr_B)
 print(len(ds_sus), len(ds_x_root))
-train_B = False 
-
-def relu_(x, threshold=0.5):
-    if x>threshold:
-        return x 
-    else:
-        return torch.tensor(0.0)
 
 if train_B:
-    loss_fn_alex = lpips.LPIPS(net='alex').cuda()
     for epoch_ in range(epoch_B):
         loss_mse_sum = 0.0; loss_logits_sum = 0.0; loss_inf_sum = 0.0
         for i in range(max(len(dl_root), len(dl_sus))):
@@ -164,10 +115,6 @@ if train_B:
             logits_root = model(B_root); logits_q = model(X_q)
             los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
             los_inf =  torch.mean(torch.max(torch.abs(B_root - X_root), dim=1)[0])
-            # lpips_loss_op = loss_fn_alex(X_root, B_root)
-            # loss_wass = utils_defence.wasserstein_distance(model(B_root), model(X_q))
-            # loss = 20*los_mse + loss_wass
-            
             loss = los_logits+2*los_mse
           
             loss.backward()
@@ -185,7 +132,7 @@ else:
     if RANDOM_B:
         pth_path = exp_dir+'/'+f'random_B_theta.pth'
     else:
-        pth_path = exp_dir+'/'+f'B_theta_{50}.pth'
+        pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -225,13 +172,13 @@ else:
     for param in model.parameters():
         param.requires_grad = True 
     # TODO: move this to a single part
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr_ft)
-    criterion = nn.CrossEntropyLoss()
+    optimizer_BvB = torch.optim.Adam(model.parameters(), lr=lr_ft)
+    criterion_BvB = nn.CrossEntropyLoss()
     utils_attack.test_acc(dl_te=dl_root, model=model, device=device)
 
     utils_attack.fine_tune_Badnet_pure(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, triggerX=triggerX, triggerY=triggerY,
-                                epoch=10, optimizer=optimizer, criterion=criterion,
+                                epoch=10, optimizer=optimizer_BvB, criterion=criterion_BvB,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
 
 

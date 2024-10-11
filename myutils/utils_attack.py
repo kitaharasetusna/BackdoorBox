@@ -476,7 +476,7 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
             cln_num += len(inputs)
         ASR = 100.00 * float(bd_correct) / bd_num 
         ACC = 100.00 * float(cln_correct) / cln_num
-        print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        print(f'model - B_\\theta ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
 
 def test_acc(dl_te, model, device):
@@ -620,6 +620,41 @@ def fine_tune_Badnet2(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, 
                 loss=loss1+0.01*loss2
             else:
                 loss=loss1
+            # loss=loss1
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        ACC_, ASR_ = test_asr_acc_badnet(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                         triggerX=triggerX, triggerY=triggerY, device=device) 
+        test_acc(dl_te=dl_root, model=model, device=device)
+        model.train()
+
+def fine_tune_Badnet_pure(dl_root, model, label_backdoor, B, device, dl_te, dl_sus, loader_root_iter, loader_sus_iter,epoch, triggerX, triggerY, optimizer, criterion):
+    '''
+    fine tune with B_theta
+    # TODO: fine tune with malicious sample
+    '''
+    model.train()
+    # ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+    #                                     secret=secret, encoder=encoder, device=device) 
+    for ep_ in range(epoch):
+        for i in range(max(len(dl_root), len(dl_sus))):
+            X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
+            inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
+            for xx in range(len(inputs_bd)):
+                inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
+                                                        B=B, device=device) 
+            inputs = torch.cat((inputs_bd, X_root), dim=0)
+            targets = torch.cat((targets_bd, Y_root))
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss1 = criterion(outputs, targets)
+            loss=loss1
             # loss=loss1
             # do a backwards pass
             loss.backward()
@@ -1393,6 +1428,12 @@ class CustomCIFAR10BATT_whole(torch.utils.data.Dataset):
 def add_BATT_gen(inputs, B, device):
     image_input= inputs.to(device)
     _, encoded_image = B(image_input) 
+    # encoded_image = encoded_image.clamp(0, 1)
+    return encoded_image.squeeze(0)
+
+def add_ISSBA_gen(inputs, B, device):
+    image_input= inputs.to(device)
+    encoded_image = B(image_input) 
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0)
 
