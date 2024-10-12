@@ -147,6 +147,63 @@ class Encoder_no(nn.Module):
         x = self.conv2(x)
         return x
 
+
+# ---------------------
+class Attention(nn.Module):
+    def __init__(self, in_channels):
+        super(Attention, self).__init__()
+        self.query_conv = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels, in_channels // 8, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x):
+        batch_size, C, height, width = x.size()
+        # Generate attention maps
+        query = self.query_conv(x).view(batch_size, -1, height * width)  # (B, C/8, H*W)
+        key = self.key_conv(x).view(batch_size, -1, height * width)  # (B, C/8, H*W)
+        value = self.value_conv(x).view(batch_size, -1, height * width)  # (B, C, H*W)
+
+        attention = self.softmax(torch.bmm(query.permute(0, 2, 1), key))  # (B, H*W, H*W)
+        out = torch.bmm(value, attention.permute(0, 2, 1)).view(batch_size, C, height, width)  # (B, C, H, W)
+        return out
+
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.skip_connection = nn.Conv2d(in_channels, out_channels, kernel_size=1) if in_channels != out_channels else None
+
+    def forward(self, x):
+        identity = x
+        out = F.relu(self.conv1(x))
+        out = self.conv2(out)
+
+        if self.skip_connection is not None:
+            identity = self.skip_connection(identity)
+
+        out += identity
+        return F.relu(out)
+
+class ImprovedEncoder(nn.Module):
+    def __init__(self):
+        super(ImprovedEncoder, self).__init__()
+        self.res_block1 = ResidualBlock(3, 16)
+        self.res_block2 = ResidualBlock(16, 32)
+        self.res_block3 = ResidualBlock(32, 64)
+        self.attention = Attention(64)
+        self.conv_final = nn.Conv2d(64, 3, kernel_size=1)
+
+    def forward(self, x):
+        x = self.res_block1(x)
+        x = self.res_block2(x)
+        x = self.res_block3(x)
+        x = self.attention(x)
+        x = self.conv_final(x)
+        return x
+#-----------------------
+
 class Encoder_residual(nn.Module):
     def __init__(self):
         super(Encoder_residual, self).__init__()
@@ -460,7 +517,7 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
                 if targets_bd[xx]!=label_backdoor:
                     # TODO: to B
                     inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
-                                                      B=B, device=device) 
+                                                      B=B, device=device)
                     targets_bd[xx] = label_backdoor
                     bd_num+=1
                 else:
@@ -645,7 +702,7 @@ def fine_tune_Badnet_pure(dl_root, model, label_backdoor, B, device, dl_te, dl_s
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
                 inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
-                                                        B=B, device=device) 
+                                                        B=B, device=device)
             inputs = torch.cat((inputs_bd, X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
             inputs, targets = inputs.to(device), targets.to(device)

@@ -37,11 +37,11 @@ torch.manual_seed(42)
 # ----------------------------------------- configs:
 exp_dir = '../experiments/exp6_FI_B/Badnet_abl' 
 secret_size = 20; label_backdoor = 6; triggerX = 6; triggerY=6 
-bs_tr = 128; epoch_Badnet = 20; lr_Badnet = 1e-4
-lr_B = 1e-2;epoch_B = 50 
-lr_ft = 2e-4; epoch_=20
-RANDOM_B = True 
-train_B = False 
+bs_tr = 128; epoch_Badnet = 10; lr_Badnet = 1e-4
+lr_B = 1e-3; epoch_B = 50 
+lr_ft = 2e-4; epoch_root = 50
+RANDOM_B = False 
+train_B = False; B_STRUCT = 'ATTENTION' 
 # ----------------------------------------- mkdirs, load ISSBA_encoder+secret+model f'
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -88,8 +88,11 @@ print(f'D_[sus] size: {len(idx_sus)}; precision: {TP/(TP+FP)}')
 ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_backdoor,
                                                            triggerX=triggerX, triggerY=triggerY)
 
-
-B_theta = utils_attack.Encoder_no(); B_theta= B_theta.to(device)
+if B_STRUCT == 'Encoder_no':
+    B_theta = utils_attack.Encoder_no()
+elif B_STRUCT == 'ATTENTION':
+    B_theta = utils_attack.ImprovedEncoder()
+B_theta= B_theta.to(device)
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
 ds_sus = Subset(ds_whole_poisoned, idx_sus)
@@ -127,12 +130,18 @@ if train_B:
         if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
             utils_attack.test_asr_acc_ISSBA_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                 B=B_theta, device=device)
-            torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
+            if B_STRUCT== "Encoder_no":
+                torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_{epoch_+1}.pth')
+            elif B_STRUCT== 'ATTENTION':
+                torch.save(B_theta.state_dict(), exp_dir+'/'+f'B_theta_attention_{epoch_+1}.pth') 
 else:
     if RANDOM_B:
         pth_path = exp_dir+'/'+f'random_B_theta.pth'
     else:
-        pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
+        if B_STRUCT=='Enconder_no':
+            pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
+        elif B_STRUCT== 'ATTENTION':
+            pth_path = exp_dir+'/'+f'B_theta_attention_{50}.pth' 
     B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -162,7 +171,10 @@ else:
             if RANDOM_B:
                 plt.savefig(exp_dir+f'/random_{index}.pdf')
             else:
-                plt.savefig(exp_dir+f'/generated_{index}.pdf')
+                if B_STRUCT=='Encoder_no':
+                    plt.savefig(exp_dir+f'/generated_{index}.pdf')
+                elif B_STRUCT== 'ATTENTION':
+                    plt.savefig(exp_dir+f'/generated_{index}.pdf') 
 
             norm_ori_bad = comp_inf_norm(tensor_ori, tensor_badnet)
             norm_ori_gen = comp_inf_norm(tensor_ori, tensor_gen)
@@ -178,7 +190,7 @@ else:
 
     utils_attack.fine_tune_Badnet_pure(dl_root=dl_root, model=model, label_backdoor=label_backdoor,
                                 B=B_theta, device=device, dl_te=dl_te, triggerX=triggerX, triggerY=triggerY,
-                                epoch=10, optimizer=optimizer_BvB, criterion=criterion_BvB,
+                                epoch=epoch_root, optimizer=optimizer_BvB, criterion=criterion_BvB,
                                 dl_sus=dl_sus, loader_root_iter=iter(dl_root), loader_sus_iter=iter(dl_sus))
 
 
