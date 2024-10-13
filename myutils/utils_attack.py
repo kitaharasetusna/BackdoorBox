@@ -507,7 +507,7 @@ def test_asr_acc_ISSBA(dl_te, model, label_backdoor, secret, encoder, device):
         print(f'model - ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
 
-def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
+def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device, normlization=None):
     model.eval()
     with torch.no_grad():
         bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
@@ -518,6 +518,8 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device):
                     # TODO: to B
                     inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
                                                       B=B, device=device)
+                    if normlization:
+                        inputs_bd[xx] = normlization(inputs_bd[xx])
                     targets_bd[xx] = label_backdoor
                     bd_num+=1
                 else:
@@ -1494,6 +1496,11 @@ def add_ISSBA_gen(inputs, B, device):
     # encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0)
 
+def add_encoder_gen(inputs, B, device):
+    image_input= inputs.to(device)
+    encoded_image = B(image_input) 
+    return encoded_image.squeeze(0)
+
 def add_BATT_sig_non(inputs, B, device):
     image_input= inputs.to(device)
     encoded_image = B(image_input) 
@@ -2021,3 +2028,42 @@ def fine_tune_SIG2_CIFAR10_random(dl_root, model, label_backdoor, B, device, dl_
                                                     freq=freq, delta=delta, device=device)
         test_acc(dl_te=dl_root, model=model, device=device)
         model.train()
+
+
+def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
+              device, dl_te, epoch, secret, encoder, optimizer, criterion, 
+              noise, noise_norm, normalization):
+    '''
+    fine tune with B_theta
+    '''
+    print(f'defending {attack}...')
+    model.train()
+    for ep_ in range(epoch):
+        for inputs, targets in dl_root:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if b_struct=='encoder':
+                    inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                B=B, device=device) 
+                if noise:
+                    inputs_bd[xx] += (torch.rand(3, 32, 32)*2-1)*noise_norm
+                # TODO: make this nonrmalize
+                inputs_bd[xx] = normalization(inputs_bd[xx])
+                #inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1, 1)
+            inputs = torch.cat((inputs_bd,inputs), dim=0)
+            targets = torch.cat((targets_bd, targets))
+            inputs, targets = inputs.to(device), targets.to(device)
+            optimizer.zero_grad()
+            # make a forward pass
+            outputs = model(inputs)
+            # calculate the loss
+            loss = criterion(outputs, targets)
+            # do a backwards pass
+            loss.backward()
+            # perform a single optimization step
+            optimizer.step()
+        print(f'epoch: {ep_+1}')
+        # TODO: save in txt files
+        ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+                                        secret=secret, encoder=encoder, device=device) 
+        test_acc(dl_te=dl_root, model=model, device=device)
