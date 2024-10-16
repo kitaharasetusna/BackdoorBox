@@ -1,4 +1,5 @@
 # Copied from: https://github.com/lvyilin/pytorch-fgvc-dataset/blob/master/tiny_imagenet.py
+# TODO: used one to utils_data and change reference accordingly
 
 import os
 import os
