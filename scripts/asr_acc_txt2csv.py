@@ -4,18 +4,18 @@ import csv
 # attacks_ =['ISSBA', 'WaNet','BATT', 'Blended']
 attacks_ =['SIG']
 for attack in attacks_:
-    exp_dir = '../experiments/exp6_FI_B/Badnet_abl/'  
+    exp_dir = '../experiments/exp8/BadNet/res/1e-4'  
     # csv_file = '/ABL_BATT'
-    files_ = ['1_random_BvB', '2_BvB']
+    files_ = ['1_BvB', '2_FT']
     for csv_file in files_:
-        txt_file = exp_dir+csv_file+'.txt'
+        txt_file = exp_dir+'/'+csv_file+'.txt'
 
 
         import re
 
         # Input and output file paths
-        input_file = exp_dir+csv_file+'.txt'  # replace with your input file path
-        output_file = exp_dir+csv_file+'_out.txt'  # replace with your desired output file path
+        input_file = exp_dir+'/'+csv_file+'.txt'  # replace with your input file path
+        output_file = exp_dir+'/'+csv_file+'_out.txt'  # replace with your desired output file path
 
         # Regular expression pattern to match the line and capture ASR and ACC values
         pattern = r'model - ASR:\s*([\d.]+), ACC:\s*([\d.]+)'

@@ -518,6 +518,7 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device, normlization
                     # TODO: to B
                     inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
                                                       B=B, device=device)
+                    # inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1.0, 1.0)
                     if normlization:
                         inputs_bd[xx] = normlization(inputs_bd[xx])
                     targets_bd[xx] = label_backdoor
@@ -2031,25 +2032,32 @@ def fine_tune_SIG2_CIFAR10_random(dl_root, model, label_backdoor, B, device, dl_
 
 
 def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
-              device, dl_te, epoch, secret, encoder, optimizer, criterion, 
-              noise, noise_norm, normalization):
+              device, dl_te, epoch, optimizer, criterion, 
+              noise, noise_norm, normalization, 
+              secret=None, encoder=None,
+              triggerX=None, triggerY=None,
+              fine_tune=False):
     '''
     fine tune with B_theta
     '''
     print(f'defending {attack}...')
+    if fine_tune==False:
+        print('adversarial learning...')
+    else:
+        print('fine tuning')
     model.train()
     for ep_ in range(epoch):
         for inputs, targets in dl_root:
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
-            for xx in range(len(inputs_bd)):
-                if b_struct=='encoder':
-                    inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
-                                B=B, device=device) 
-                if noise:
-                    inputs_bd[xx] += (torch.rand(3, 32, 32)*2-1)*noise_norm
-                # TODO: make this nonrmalize
-                inputs_bd[xx] = normalization(inputs_bd[xx])
-                #inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1, 1)
+            if fine_tune==False:
+                for xx in range(len(inputs_bd)):
+                    if b_struct=='encoder':
+                        inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                    B=B, device=device) 
+                    if noise:
+                        inputs_bd[xx] += torch.rand(3, 32, 32)*noise_norm
+                    # TODO: make this nonrmalize
+                    inputs_bd[xx] = normalization(inputs_bd[xx])
             inputs = torch.cat((inputs_bd,inputs), dim=0)
             targets = torch.cat((targets_bd, targets))
             inputs, targets = inputs.to(device), targets.to(device)
@@ -2064,6 +2072,11 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
             optimizer.step()
         print(f'epoch: {ep_+1}')
         # TODO: save in txt files
-        ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
+        if attack=='ISSBA':
+            ACC_, ASR_ = test_asr_acc_ISSBA(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                         secret=secret, encoder=encoder, device=device) 
+        elif attack=='BadNet':
+            ACC_, ASR_ =  test_asr_acc_badnet(dl_te=dl_te, model=model,
+                        label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
+                        device=device) 
         test_acc(dl_te=dl_root, model=model, device=device)
