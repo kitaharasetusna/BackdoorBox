@@ -428,3 +428,67 @@ def test_f1_score(idx_sus, ids_p):
         else:
             FP+=1
     print(TP/(TP+FP))
+
+
+# ---------------------------------------- difussion model ------------------------------------------------------
+class UNet(nn.Module):
+    # Simplified U-Net
+    def __init__(self):
+        super(UNet, self).__init__()
+        # Example encoder and decoder layers
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, padding=1),  # Conv layer
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),  # Conv layer
+            nn.ReLU()
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1),  # Transposed Conv layer
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=3, padding=1),  # Transposed Conv layer
+            nn.Tanh()
+        )
+    
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+def forward_diffusion(x0, t, noise_schedule):
+    noise = torch.randn_like(x0)
+    alpha_t = noise_schedule[t]
+    x_t = torch.sqrt(alpha_t).view(alpha_t.shape[0], 1, 1, 1) * x0 +\
+         torch.sqrt(1 - alpha_t).view(alpha_t.shape[0], 1, 1, 1) * noise
+    return x_t, noise
+
+def reverse_process(model, x_t, t, noise_schedule):
+    pred_noise = model(x_t)
+    alpha_t = noise_schedule[t]
+    return (x_t - torch.sqrt(1 - alpha_t).view(alpha_t.shape[0], 1, 1, 1) * pred_noise) / torch.sqrt(alpha_t).view(alpha_t.shape[0], 1, 1, 1)
+
+def loss_fn(model, x0, t, noise_schedule):
+    x_t, noise = forward_diffusion(x0, t, noise_schedule)
+    pred_noise = model(x_t)
+    return F.mse_loss(pred_noise, noise)
+
+
+def sample(model, timesteps, noise_schedule):
+    ''' sample an image from guassain noise using the learned diffusion model 
+    '''
+    with torch.no_grad():
+        x_t = torch.randn(1, 3, 32, 32).cuda()  # Start with pure noise
+        for t in reversed(range(timesteps)):
+            x_t = reverse_process(model, x_t, t, noise_schedule)
+        return x_t
+
+# Visualizing the Generated Image
+def show_image(img):
+    img = img.cpu().numpy().transpose(1, 2, 0)
+    img = (img * 0.5) + 0.5  # Unnormalize
+    plt.imshow(img)
+    plt.axis('off')
+    plt.savefig('test.pdf')
+
+
+
+
