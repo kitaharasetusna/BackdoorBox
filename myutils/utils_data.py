@@ -282,6 +282,73 @@ def prepare_CIFAR10_datasets_3(foloder, load=False, seed=42):
 
     return trainset, testset, ids_root, ids_q, ids_p, ids_cln, ids_noise 
 
+def prepare_CIFAR10_datasets_pkl(foloder, load=False, seed=42):
+    ''' collect randomly 10% data as secure data (FOLDER_UPDATED)
+        params: 
+            seed: ensure that [random split] return the same split of 
+            clean and questioned every time you call this function
+        return:
+            trainset, testset, ids_root, ids_q, ids_p, ids_cln
+    '''
+    torch.manual_seed(seed)
+    transform_train = Compose([
+        transforms.Resize((32, 32)),
+        transforms.RandomCrop((32, 32), padding=5),
+        transforms.RandomRotation(10),
+        transforms.RandomHorizontalFlip(p=0.5),
+        ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                            (0.247, 0.243, 0.261))
+    ])
+    transform_test = Compose([
+        transforms.Resize((32, 32)),
+        ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465),
+                            (0.247, 0.243, 0.261))
+    ])
+    # trainset1 and testset1 are used for computing diversity loss
+    trainset = CIFAR10(
+        root='../datasets', # please replace this with path to your dataset
+        transform=transform_train,
+        target_transform=None,
+        train=True,
+        download=True)
+    testset = CIFAR10(
+        root='../datasets', # please replace this with path to your dataset
+        transform=transform_test,
+        target_transform=None,
+        train=False,
+        download=True)
+    
+    # ---------------------------------------------- st: Get the indices: (root 10%, q 90%->[10% p, 90% cln])
+    if load==False:
+        num_train = len(trainset)
+        # Shuffle the indices
+        torch.manual_seed(42)  # For reproducibility
+        indices = torch.randperm(num_train).tolist()
+
+        # Split indices into two subsets: 10% and 90%
+        split = int(0.1 * num_train)
+        ids_root = indices[:split]
+        ids_q = indices[split:]
+
+        # spilit questioned into poisoned 10%, and clean 90%
+        split2 = int(0.1 * len(ids_q))
+        ids_p = ids_q[:split2]
+        ids_cln = ids_q[split2:]
+        
+        with open(foloder+'/cifar10_indices.pkl', 'wb') as f:
+            pickle.dump({'ids_root': ids_root, 'ids_q': ids_q, 'ids_p': ids_p, 'ids_cln': ids_cln}, f)
+    else:
+        with open(foloder+'/cifar10_indices.pkl', 'rb') as f:
+            dict_ids = pickle.load(f)
+            ids_root = dict_ids['ids_root']; ids_q = dict_ids['ids_q']
+            ids_p = dict_ids['ids_p']; ids_cln = dict_ids['ids_cln']
+    # ---------------------------------------------- ed: Get the indices
+
+    return trainset, testset, ids_root, ids_q, ids_p, ids_cln 
+
+
 def prepare_CIFAR10_datasets_batt(foloder, load=False, seed=42):
     ''' collect randomly 10% data as secure data
         params: 
