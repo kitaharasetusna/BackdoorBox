@@ -8,6 +8,9 @@ from torchcam.methods import SmoothGradCAMpp, CAM, GradCAM, LayerCAM
 from torchcam.utils import overlay_mask
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import normalize, resize, to_pil_image
+from PIL import Image
+import numpy as np
+from typing import Optional, Tuple, Union, List
 
 def compute_fisher_information(model, images, labels, criterion, device='cpu', mode='sum', loss_=False):
     """
@@ -433,7 +436,7 @@ def test_f1_score(idx_sus, ids_p):
 
 
 # ---------------------------------------- difussion model ------------------------------------------------------
-from typing import Optional, Tuple, Union, List
+# 
 class Swish(nn.Module):
     """
     ### Swish actiavation function
@@ -698,6 +701,18 @@ class Downsample(nn.Module):
         return self.conv(x)
 
 # The core class definition (aka the important bit)
+def get_beta():
+    '''
+        returns:
+            return n_steps, beta, alpha, alpha_bar
+    '''
+    # Set up some parameters
+    n_steps = 1000
+    beta = torch.linspace(0.0001, 0.04, n_steps).cuda()
+    alpha = 1. - beta
+    alpha_bar = torch.cumprod(alpha, dim=0)
+    return n_steps, beta, alpha, alpha_bar
+
 class UNet(nn.Module):
     """
     ## U-Net
@@ -809,15 +824,12 @@ class UNet(nn.Module):
         # Final normalization and convolution
         return self.final(self.act(self.norm(x)))
 
-
-# TODO: remove this to the beginning of the code
-from PIL import Image
-import numpy as np
 def tensor_to_image(t):
-    '''
+    ''' deprecated (no denormalization)
     tensor to PIL image (for display)
+    # TODO: add denormalization
     '''
-    return Image.fromarray(np.array(((t.squeeze().permute(1, 2, 0)+1)/2).clip(0, 1)*255).astype(np.uint8))
+    return Image.fromarray(np.array((t.squeeze().permute(1, 2, 0))*255).astype(np.uint8))
 
 def q_xt_xtminus1(xtm1, t, device, beta):
     ''' add noise to image xtm1
@@ -847,9 +859,8 @@ def q_xt_x0(x0, t, device, alpha_bar):
     # End
 
 def p_xt(xt, noise, t, alpha, alpha_bar, beta, device):
-################################################################################
-    # TODO: complete the code here
-    # Write this function based on the formula given in the paper for the reverse step
+    ''' noise to image
+    '''
     alpha_t = alpha[t]
     alpha_bar_t = alpha_bar[t]
     eps_coef = (1 - alpha_t) / (1 - alpha_bar_t) ** .5
@@ -858,73 +869,13 @@ def p_xt(xt, noise, t, alpha, alpha_bar, beta, device):
     eps = torch.randn(xt.shape, device=device)
     return mean + (var ** 0.5) * eps
 
-    # End
-################################################################################
-
-
-
-
-
-# TODO: remove this
-# class UNet(nn.Module):
-#     # Simplified U-Net
-#     def __init__(self):
-#         super(UNet, self).__init__()
-#         # Example encoder and decoder layers
-#         self.encoder = nn.Sequential(
-#             nn.Conv2d(3, 64, kernel_size=3, padding=1),  # Conv layer
-#             nn.ReLU(),
-#             nn.Conv2d(64, 128, kernel_size=3, padding=1),  # Conv layer
-#             nn.ReLU()
-#         )
-#         self.decoder = nn.Sequential(
-#             nn.ConvTranspose2d(128, 64, kernel_size=3, padding=1),  # Transposed Conv layer
-#             nn.ReLU(),
-#             nn.ConvTranspose2d(64, 3, kernel_size=3, padding=1),  # Transposed Conv layer
-#             nn.Tanh()
-#         )
-    
-#     def forward(self, x):
-#         x = self.encoder(x)
-#         x = self.decoder(x)
-#         return x
-
-# def forward_diffusion(x0, t, noise_schedule):
-#     noise = torch.randn_like(x0)
-#     alpha_t = noise_schedule[t]
-#     x_t = torch.sqrt(alpha_t).view(alpha_t.shape[0], 1, 1, 1) * x0 +\
-#          torch.sqrt(1 - alpha_t).view(alpha_t.shape[0], 1, 1, 1) * noise
-#     return x_t, noise
-
-# def reverse_process(model, x_t, t, noise_schedule):
-#     pred_noise = model(x_t, torch.tensor(t, dtype=torch.int32).cuda())
-#     alpha_t = noise_schedule[t]
-#     return (x_t - torch.sqrt(1 - alpha_t) * pred_noise) / torch.sqrt(alpha_t)
-
-# def loss_fn(model, x0, t, noise_schedule):
-#     x_t, noise = forward_diffusion(x0, t, noise_schedule)
-#     pred_noise = model(x_t, t)
-#     return F.mse_loss(pred_noise, noise)
-
-
-# def sample(model, timesteps, noise_schedule):
-#     ''' sample an image from guassain noise using the learned diffusion model 
-#     '''
-#     with torch.no_grad():
-#         x_t = torch.randn(1, 3, 32, 32).cuda()  # Start with pure noise
-#         for t in reversed(range(timesteps)):
-#             x_t = reverse_process(model, x_t, t, noise_schedule)
-#         return x_t
-
-# # Visualizing the Generated Image
-# def show_image(img, epoch):
-#     img = img.cpu().numpy().transpose(1, 2, 0)
-#     img = (img * 0.5) + 0.5  # Unnormalize
-#     plt.imshow(img)
-#     plt.axis('off')
-#     plt.show()
-#     plt.savefig(f'test_{epoch+1}.pdf')
-
-
-
-
+def sampling(x_T, model, T, alpha, alpha_bar, beta, device):
+    x = x_T
+    for i in range(T):
+        t = torch.tensor(T-i-1, dtype=torch.long).cuda()
+        with torch.no_grad():
+            pred_noise = model(x.float(), t.unsqueeze(0))
+            x = p_xt(x, pred_noise, t.unsqueeze(0), 
+                    alpha=alpha, alpha_bar=alpha_bar,
+                    beta=beta, device=device)
+    return x

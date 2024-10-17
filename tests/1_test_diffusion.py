@@ -66,17 +66,9 @@ image.save(exp_dir+'2_cifar-10_test_add_noise.pdf', 'PDF')
 
 # Create the model
 unet = utils_defence.UNet(n_channels=32).cuda()
+n_steps, beta, alpha, alpha_bar = utils_defence.get_beta()
 
-# Set up some parameters
-n_steps = 1000
-beta = torch.linspace(0.0001, 0.04, n_steps).cuda()
-alpha = 1. - beta
-alpha_bar = torch.cumprod(alpha, dim=0)
-
-# Training params
-# batch_size = 128 # Lower this if hitting memory issues
 lr = 7e-5 # Explore this - might want it lower when training on the full dataset
-
 losses = [] # Store losses for later plotting
 optim = torch.optim.Adam(unet.parameters(), lr=lr) # Optimizer
 
@@ -138,13 +130,11 @@ image.save(exp_dir+"5_generated.pdf", "PDF")
 #@title Make and show 10 examples:
 x = torch.randn(100, 3, 32, 32).cuda() # Start with random noise
 ims = []
-for i in range(n_steps):
-  t = torch.tensor(n_steps-i-1, dtype=torch.long).cuda()
-  with torch.no_grad():
-    pred_noise = model(x.float(), t.unsqueeze(0))
-    x = utils_defence.p_xt(x, pred_noise, t.unsqueeze(0), 
-                           alpha=alpha, alpha_bar=alpha_bar,
-                           beta=beta, device=device)
+
+x = utils_defence.sampling(x_T=x, model=model,
+                           T=n_steps, alpha=alpha,
+                           alpha_bar=alpha_bar, beta=beta,
+                           device=device)
 
 for i in range(100):
     ims.append(utils_defence.tensor_to_image(x[i].unsqueeze(0).cpu()))
