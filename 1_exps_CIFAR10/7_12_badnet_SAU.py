@@ -28,7 +28,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/Badnet'; dataset = 'cifar10'; num_classes = 10
 label_backdoor = 6; triggerX = 6; triggerY=6 
 bs_tr = 128
-lr_ft = 1e-4; epoch_SAU=10
+lr_ft = 1e-4; epoch_SAU=20
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
@@ -158,7 +158,7 @@ for round in range(epoch_SAU):
 
             # delete the useless variable to save memory
             del logits, logits_ref, per_logits, per_logits_ref, loss_cl, loss_at, loss_shared, loss
-    
+    print(f'epoch: {round}') 
     ACC_, ASR_ =  utils_attack.test_asr_acc_badnet(dl_te=dl_te, model=model,
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device) 

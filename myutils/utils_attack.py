@@ -2125,7 +2125,8 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
               noise, noise_norm, normalization, 
               secret=None, encoder=None,
               triggerX=None, triggerY=None,
-              fine_tune=False):
+              fine_tune=False,
+              ORACLE=False):
     '''
     fine tune with B_theta
     '''
@@ -2134,19 +2135,23 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
         print('adversarial learning...')
     else:
         print('fine tuning')
+    if ORACLE==True:
+        print('ORACLE INIT')
     model.train()
     for ep_ in range(epoch):
         for inputs, targets in dl_root:
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
             if fine_tune==False:
                 for xx in range(len(inputs_bd)):
-                    if b_struct=='encoder':
+                    if b_struct=='encoder' or b_struct=='UNET':
                         inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
                                     B=B, device=device) 
+                    elif ORACLE:
+                        if attack=='BadNet':
+                            inputs_bd[xx] = add_badnet_trigger(inputs_bd[xx], 
+                            triggerX=triggerX, triggerY=triggerY)
                     if noise:
                         inputs_bd[xx] += torch.rand(3, 32, 32)*noise_norm
-                    # TODO: make this nonrmalize
-                    # inputs_bd[xx] = normalization(inputs_bd[xx])
             inputs = torch.cat((inputs_bd,inputs), dim=0)
             targets = torch.cat((targets_bd, targets))
             inputs, targets = inputs.to(device), targets.to(device)
