@@ -479,6 +479,29 @@ def add_ISSBA_gen(inputs, B, device, clamp=False):
         encoded_image = encoded_image.clamp(0, 1)
     return encoded_image.squeeze(0) 
 
+def p_xt(xt, noise, t, alpha, alpha_bar, beta, device):
+    ''' noise to image
+    '''
+    alpha_t = alpha[t]
+    alpha_bar_t = alpha_bar[t]
+    eps_coef = (1 - alpha_t) / (1 - alpha_bar_t) ** .5
+    mean = 1 / (alpha_t ** 0.5) * (xt - eps_coef * noise)
+    var = beta[t]
+    eps = torch.randn(xt.shape, device=device)
+    return mean + (var ** 0.5) * eps
+
+def add_DDPM_gen(inputs, B, T, alpha, alpha_bar, beta, device):
+    x = inputs.to(device) 
+    for i in range(1):
+        # t = torch.tensor(T-i-1, dtype=torch.long).cuda()
+        t = torch.randint(0, T, (1,), dtype=torch.long).cuda()
+        with torch.no_grad():
+            pred_noise = B(x.float(), t)
+            x = p_xt(x, pred_noise, t, 
+                    alpha=alpha, alpha_bar=alpha_bar,
+                    beta=beta, device=device)
+    return x.squeeze(0)
+
 def test_asr_acc_ISSBA(dl_te, model, label_backdoor, secret, encoder, device):
     model.eval()
     with torch.no_grad():
@@ -516,7 +539,7 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device, normlization
             for xx in range(len(inputs_bd)):
                 if targets_bd[xx]!=label_backdoor:
                     # TODO: to B
-                    inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
+                    inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx].unsqueeze(0), 
                                                       B=B, device=device)
                     # inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1.0, 1.0)
                     if normlization:
@@ -538,6 +561,72 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device, normlization
         ACC = 100.00 * float(cln_correct) / cln_num
         print(f'model - B_\\theta ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
+
+def test_asr_acc_BvB_gen(dl_te, model, label_backdoor, B, device, normlization=None):
+    model.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    # TODO: to B
+                    inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                      B=B, device=device)
+                    # inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1.0, 1.0)
+                    if normlization:
+                        inputs_bd[xx] = normlization(inputs_bd[xx])
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - B_\\theta ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        return ACC, ASR
+
+def test_asr_acc_DDPM_gen(dl_te, model, label_backdoor, B, device, normlization=None, T=None, 
+                          alpha=None, alpha_bar=None, beta=None):
+    model.eval()
+    B.eval()
+    with torch.no_grad():
+        bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
+        for inputs, targets in dl_te:
+            inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
+            for xx in range(len(inputs_bd)):
+                if targets_bd[xx]!=label_backdoor:
+                    # TODO: to B
+                    inputs_bd[xx] = add_DDPM_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                B=B, 
+                                                T=T, alpha=alpha, alpha_bar=alpha_bar,
+                                                beta=beta, device=device)
+                    targets_bd[xx] = label_backdoor
+                    bd_num+=1
+                else:
+                    targets_bd[xx] = -1
+            inputs_bd, targets_bd = inputs_bd.to(device), targets_bd.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
+            bd_log_probs = model(inputs_bd)
+            bd_y_pred = bd_log_probs.data.max(1, keepdim=True)[1]
+            bd_correct += bd_y_pred.eq(targets_bd.data.view_as(bd_y_pred)).long().cpu().sum()
+            log_probs = model(inputs)
+            y_pred = log_probs.data.max(1, keepdim=True)[1]
+            cln_correct += y_pred.eq(targets.data.view_as(y_pred)).long().cpu().sum()
+            cln_num += len(inputs)
+        ASR = 100.00 * float(bd_correct) / bd_num 
+        ACC = 100.00 * float(cln_correct) / cln_num
+        print(f'model - B_\\theta ASR: {ASR: .2f}, ACC: {ACC: .2f}')
+        return ACC, ASR
+
 
 def test_acc(dl_te, model, device):
     model.eval()
@@ -704,7 +793,7 @@ def fine_tune_Badnet_pure(dl_root, model, label_backdoor, B, device, dl_te, dl_s
             X_root, Y_root = get_next_batch(loader_root_iter, dl_root)
             inputs_bd, targets_bd = copy.deepcopy(X_root), copy.deepcopy(Y_root)
             for xx in range(len(inputs_bd)):
-                inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx], 
+                inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx].unsqueeze(0), 
                                                         B=B, device=device)
             inputs = torch.cat((inputs_bd, X_root), dim=0)
             targets = torch.cat((targets_bd, Y_root))
@@ -2057,7 +2146,7 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
                     if noise:
                         inputs_bd[xx] += torch.rand(3, 32, 32)*noise_norm
                     # TODO: make this nonrmalize
-                    inputs_bd[xx] = normalization(inputs_bd[xx])
+                    # inputs_bd[xx] = normalization(inputs_bd[xx])
             inputs = torch.cat((inputs_bd,inputs), dim=0)
             targets = torch.cat((targets_bd, targets))
             inputs, targets = inputs.to(device), targets.to(device)

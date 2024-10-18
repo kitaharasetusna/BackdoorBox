@@ -41,7 +41,7 @@ bs_tr = 128; epoch_Badnet = 10; lr_Badnet = 1e-4
 lr_B = 1e-3; epoch_B = 50 
 lr_ft = 2e-4; epoch_root = 50
 RANDOM_B = False 
-train_B = False; B_STRUCT = 'ATTENTION' 
+train_B = False; B_STRUCT = 'Enconder_no' 
 # ----------------------------------------- mkdirs, load ISSBA_encoder+secret+model f'
 os.makedirs(exp_dir, exist_ok=True)
 
@@ -88,7 +88,7 @@ print(f'D_[sus] size: {len(idx_sus)}; precision: {TP/(TP+FP)}')
 ds_whole_poisoned = utils_attack.CustomCIFAR10Badnet_whole(ds_tr, ids_p, label_backdoor,
                                                            triggerX=triggerX, triggerY=triggerY)
 
-if B_STRUCT == 'Encoder_no':
+if B_STRUCT == 'Enconder_no':
     B_theta = utils_attack.Encoder_no()
 elif B_STRUCT == 'ATTENTION':
     B_theta = utils_attack.ImprovedEncoder()
@@ -140,6 +140,7 @@ else:
     else:
         if B_STRUCT=='Enconder_no':
             pth_path = exp_dir+'/'+f'B_theta_{30}.pth'
+            print("load encoder B_\\theta")
         elif B_STRUCT== 'ATTENTION':
             pth_path = exp_dir+'/'+f'B_theta_attention_{50}.pth' 
     B_theta.load_state_dict(torch.load(pth_path))

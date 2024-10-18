@@ -26,7 +26,7 @@ args = parser.parse_args()
 sys.path.append('..')
 import core
 from core.attacks.ISSBA import StegaStampEncoder, StegaStampDecoder, Discriminator
-from myutils import utils_data, utils_attack, utils_defence, utils_load
+from myutils import utils_data, utils_attack, utils_defence, utils_load, utils_model
 import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 
@@ -150,7 +150,7 @@ if train_B:
 
             optimizer.zero_grad()
             B_root = B_theta(X_root)
-            B_root = normalization(B_root)
+            # B_root = normalization(B_root)
             
             los_mse = utils_attack.reconstruction_loss(X_root, B_root) 
             logits_root = model(B_root); logits_q = model(X_q)
