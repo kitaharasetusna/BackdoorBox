@@ -562,7 +562,8 @@ def test_asr_acc_ISSBA_gen(dl_te, model, label_backdoor, B, device, normlization
         print(f'model - B_\\theta ASR: {ASR: .2f}, ACC: {ACC: .2f}')
         return ACC, ASR
 
-def test_asr_acc_BvB_gen(dl_te, model, label_backdoor, B, device, normlization=None):
+def test_asr_acc_BvB_gen(dl_te, model, label_backdoor, B, device, normlization=None,
+                         B_STRUCT=None):
     model.eval()
     with torch.no_grad():
         bd_num = 0; bd_correct = 0; cln_num = 0; cln_correct = 0 
@@ -571,8 +572,12 @@ def test_asr_acc_BvB_gen(dl_te, model, label_backdoor, B, device, normlization=N
             for xx in range(len(inputs_bd)):
                 if targets_bd[xx]!=label_backdoor:
                     # TODO: to B
-                    inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx].unsqueeze(0), 
-                                                      B=B, device=device)
+                    if B_STRUCT=='EncoSTN-2':
+                        inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                        B=B, device=device)
+                    else:
+                        inputs_bd[xx] = add_ISSBA_gen(inputs=inputs_bd[xx].unsqueeze(0), 
+                                                        B=B, device=device)
                     # inputs_bd[xx] = torch.clamp(inputs_bd[xx], -1.0, 1.0)
                     if normlization:
                         inputs_bd[xx] = normlization(inputs_bd[xx])
@@ -2125,6 +2130,7 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
               noise, noise_norm, normalization, 
               secret=None, encoder=None,
               triggerX=None, triggerY=None,
+              rotation=None,
               fine_tune=False,
               ORACLE=False):
     '''
@@ -2146,10 +2152,16 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
                     if b_struct=='encoder' or b_struct=='UNET':
                         inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
                                     B=B, device=device) 
+                    elif b_struct=='EncoSTN-2':
+                        inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                    B=B, device=device) 
                     elif ORACLE:
                         if attack=='BadNet':
                             inputs_bd[xx] = add_badnet_trigger(inputs_bd[xx], 
                             triggerX=triggerX, triggerY=triggerY)
+                        elif attack=='BATT':
+                            inputs_bd[xx]=add_batt_trigger(inputs=inputs_bd[xx], 
+                                        rotation=rotation)
                     if noise:
                         inputs_bd[xx] += torch.rand(3, 32, 32)*noise_norm
             inputs = torch.cat((inputs_bd,inputs), dim=0)
@@ -2173,4 +2185,8 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
             ACC_, ASR_ =  test_asr_acc_badnet(dl_te=dl_te, model=model,
                         label_backdoor=label_backdoor, triggerX=triggerX, triggerY=triggerY,
                         device=device) 
+        elif attack=='BATT':
+            ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, 
+                label_backdoor=label_backdoor,
+                rotation=rotation, device=device)
         test_acc(dl_te=dl_root, model=model, device=device)
