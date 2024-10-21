@@ -101,6 +101,29 @@ for round in range(epoch_SAU):
 
         batch_pert = Shared_PGD_Attacker.attack(images, labels, max_eps, min_eps)
 
+        #---- TODO: print pdf images
+        for index in [100, 200, 300, 400, 500, 600]:
+            with torch.no_grad(): 
+                image_, _=ds_x_root[index]; image_c = copy.deepcopy(image_) #(3, 32, 32)
+                image_ = image_.to(device).unsqueeze(0); image = copy.deepcopy(image_) # (1, 3, 32, 32)
+                image_ = utils_data.unnormalize(image_, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
+                image_ = image_.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                plt.imshow(image_);plt.savefig(exp_dir+f'/imgs/ori_{index}.pdf')
+
+                # TODO: change this to other attacks
+                encoded_image = utils_attack.add_badnet_trigger(image_c, triggerY=triggerY, triggerX=triggerX) 
+                
+                issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                plt.imshow(issba_image)
+                plt.savefig(exp_dir+f'/imgs/BadNet_{index}.pdf')
+
+
+                pert_image = get_perturbed_image(images, batch_pert.detach())
+                encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
+                issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
+                plt.imshow(issba_image)
+                plt.savefig(exp_dir+f'/imgs/SAU_{index}.pdf')
+        #----
         for _ in range(outer_steps):
             model.train()
             pert_image = get_perturbed_image(images, batch_pert.detach())

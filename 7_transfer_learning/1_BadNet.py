@@ -54,7 +54,7 @@ np.random.seed(42)
 torch.manual_seed(42)
 
 # ----------------------------------------- configs:
-exp_dir = f'../experiments/exp10/{args.attack}' 
+exp_dir = f'../experiments/exp11_transfer_learning/{args.attack}' 
 if args.create_configs:
     print('creating configuration yaml files')
     os.makedirs(exp_dir, exist_ok=True) 
@@ -221,22 +221,35 @@ if train_B:
             X_root, X_q = X_root.to(device), X_q.to(device)
 
             optimizer.zero_grad()
+            
+            out1, out2, out3, out4 = model.feature_(X_root)
+            out1_q, out2_q, out3_q, out4_q  = model.feature_(X_q)
+            # 1-orch.Size([50, 64, 32, 32]) 
+            # 2-torch.Size([50, 128, 16, 16]) 
+            # 3-torch.Size([50, 256, 8, 8]) 
+            # 4-torch.Size([50, 512, 4, 4])
             if B_STRUCT=='EncoSTN-2':
                 _,_,_,B_root = B_theta(X_root)
             else:
                 B_root = B_theta(X_root)
+                out1_g, out2_g, out3_g, out4_g = model.feature_(B_root)
             # B_root = normalization(B_root)
             
-            los_mse = utils_attack.reconstruction_loss(X_root, B_root) 
-            logits_root = model(B_root); logits_q = model(X_q)
-            los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
-            loss = los_mse + los_logits
+            # loss_mse = utils_attack.reconstruction_loss(X_root, B_root) 
+            loss_style = utils_defence.GramMSELoss()(out4_g, out4_q)
+            # logits_root = model(B_root); logits_q = model(X_q)
+            # los_logits = F.kl_div(F.log_softmax(logits_root, dim=1), F.softmax(logits_q, dim=1), reduction='batchmean')
+            # loss = los_mse + los_logits
+            loss_mse=10*nn.MSELoss()(B_root, X_root)+0.1*nn.MSELoss()(out1_g, out1)+0.01*nn.MSELoss()(out2_g, out2)
+            loss = loss_mse+1.0*loss_style
             loss.backward()
             optimizer.step()
-            loss_sum+=loss.item(); loss_mse_sum+=los_mse.item(); loss_kl_sum+=los_logits.item()
+            loss_sum+=loss.item()
+            loss_mse_sum+=loss_mse.item(); 
+            loss_kl_sum+=loss_style.item()
         print(f'epoch: {epoch_}, loss: {loss_sum/len(dl_sus): .2f}')
-        print(f'loss mse (sample): {loss_mse_sum/len(ds_sus): .2f}')
-        print(f'loss KL (batch): {loss_kl_sum/len(dl_sus): .2f}')
+        print(f'loss mse (batch): {loss_mse_sum/len(dl_sus): .2f}')
+        print(f'loss style (batch): {loss_kl_sum/len(dl_sus): .2f}')
         if (epoch_+1)%5==0 or epoch_==epoch_B-1 or epoch_==0:
             utils_attack.test_asr_acc_BvB_gen(dl_te=dl_te, model=model, label_backdoor=label_backdoor,
                                                 B=B_theta, device=device,
@@ -250,7 +263,7 @@ else:
         B_theta = B_theta.to(device)
         random_initialize(B_theta)
     else:
-        pth_path = exp_dir+'/'+f'model/B_theta_{5}.pth'
+        pth_path = exp_dir+'/'+f'model/B_theta_{10}.pth'
         B_theta.load_state_dict(torch.load(pth_path))
     B_theta.eval()
     B_theta.requires_grad_(False) 
@@ -285,7 +298,6 @@ else:
                     encoded_image = B_theta(image)
                 else:
                     _, _, _, encoded_image = B_theta(image)
-                encoded_image = normalization(encoded_image)
                 encoded_image = utils_data.unnormalize(encoded_image, mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]) 
                 issba_image = encoded_image.squeeze().cpu().detach().numpy().transpose((1, 2, 0))
                 plt.imshow(issba_image)

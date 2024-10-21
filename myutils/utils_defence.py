@@ -879,3 +879,22 @@ def sampling(x_T, model, T, alpha, alpha_bar, beta, device):
                     alpha=alpha, alpha_bar=alpha_bar,
                     beta=beta, device=device)
     return x
+
+# ------------------------------------- 7-transfer learning -----------------------------------------------------
+# gram matrix and loss
+class GramMatrix(nn.Module):
+    def forward(self, input):
+        b,c,h,w = input.size()
+        F = input.view(b, c, h*w)
+        G = torch.bmm(F, F.transpose(1,2)) 
+        G.div_(h*w)
+        return G
+
+# class GramMSELoss(nn.Module):
+#     def forward(self, input, target):
+#         out = nn.MSELoss()(GramMatrix()(input), target)
+#         return(out)
+
+class GramMSELoss(nn.Module):
+    def forward(self, input, target):
+        return nn.MSELoss()(GramMatrix()(input), GramMatrix()(target))

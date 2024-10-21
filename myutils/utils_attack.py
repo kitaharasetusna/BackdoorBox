@@ -2149,19 +2149,20 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
             inputs_bd, targets_bd = copy.deepcopy(inputs), copy.deepcopy(targets)
             if fine_tune==False:
                 for xx in range(len(inputs_bd)):
-                    if b_struct=='encoder' or b_struct=='UNET':
-                        inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
-                                    B=B, device=device) 
-                    elif b_struct=='EncoSTN-2':
-                        inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
-                                    B=B, device=device) 
-                    elif ORACLE:
+                    if ORACLE:
                         if attack=='BadNet':
                             inputs_bd[xx] = add_badnet_trigger(inputs_bd[xx], 
                             triggerX=triggerX, triggerY=triggerY)
                         elif attack=='BATT':
                             inputs_bd[xx]=add_batt_trigger(inputs=inputs_bd[xx], 
                                         rotation=rotation)
+                    else:
+                        if b_struct=='encoder' or b_struct=='UNet':
+                            inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                        B=B, device=device) 
+                        elif b_struct=='EncoSTN-2':
+                            inputs_bd[xx] = add_BATT_gen_2(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
+                                        B=B, device=device) 
                     if noise:
                         inputs_bd[xx] += torch.rand(3, 32, 32)*noise_norm
             inputs = torch.cat((inputs_bd,inputs), dim=0)
