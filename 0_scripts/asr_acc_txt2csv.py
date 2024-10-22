@@ -4,9 +4,10 @@ import csv
 # attacks_ =['ISSBA', 'WaNet','BATT', 'Blended']
 attacks_ =['SIG']
 for attack in attacks_:
-    exp_dir = '../experiments/exp10/BadNet/res/'  
+    exp_dir = '../experiments/exp11_transfer_learning/Blend/res'  
     # csv_file = '/ABL_BATT'
-    files_ = ['1_oracle', '2_ft', '3_SAU', '4_BvB', '5_BvB_noise']
+    files_ = ['1_oracle', '2_FT', '3_SAU', '4_BvB']
+    # files_ = ['4_BvB']
     for csv_file in files_:
         txt_file = exp_dir+'/'+csv_file+'.txt'
 

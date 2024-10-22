@@ -28,7 +28,7 @@ torch.manual_seed(42)
 exp_dir = '../experiments/exp6_FI_B/Blended2'; dataset = 'cifar10'; num_classes = 10
 label_backdoor = 6; idx_blend = 656 
 bs_tr = 128
-lr_ft = 1e-4; epoch_SAU=10
+lr_ft = 1e-4; epoch_SAU=15
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 rotation = 16 
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
@@ -59,7 +59,7 @@ dl_te = DataLoader(dataset= ds_te,batch_size=bs_tr,shuffle=False,
 pattern, _ = ds_te[idx_blend] #(3, 32, 32)
 
 ds_questioned = utils_attack.CustomCIFAR10Blended(original_dataset=ds_tr, subset_indices=ids_q,
-                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern)
+                trigger_indices=ids_p, label_bd=label_backdoor, pattern=pattern, alpha=0.2)
 dl_x_q = DataLoader(dataset= ds_questioned,batch_size=bs_tr,shuffle=True,
     num_workers=0,drop_last=False,
 )
@@ -75,7 +75,7 @@ dl_x_q2 = DataLoader(
 
 
 ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                            label_backdoor=label_backdoor, pattern=pattern, device=device)
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.2)
 # ----------------------------------------- 5 prepare root data 
 ds_x_root = Subset(ds_tr, ids_root)
 dl_root = DataLoader(dataset= ds_x_root,batch_size=bs_tr,shuffle=True,num_workers=0,drop_last=True)
@@ -174,6 +174,6 @@ for round in range(epoch_SAU):
 
             # delete the useless variable to save memory
             del logits, logits_ref, per_logits, per_logits_ref, loss_cl, loss_at, loss_shared, loss
-    
+    print(f'epoch: {round+1}') 
     ACC_, ASR_ = utils_attack.test_asr_acc_blended(dl_te=dl_te, model=model,
-                            label_backdoor=label_backdoor, pattern=pattern, device=device) 
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=0.2) 

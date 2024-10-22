@@ -2131,6 +2131,7 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
               secret=None, encoder=None,
               triggerX=None, triggerY=None,
               rotation=None,
+              alpha=None, idx_blend=None, pattern=None,
               fine_tune=False,
               ORACLE=False):
     '''
@@ -2156,6 +2157,9 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
                         elif attack=='BATT':
                             inputs_bd[xx]=add_batt_trigger(inputs=inputs_bd[xx], 
                                         rotation=rotation)
+                        elif attack=='Blend':
+                            inputs_bd[xx]=add_blended_trigger(inputs=inputs_bd[xx],
+                                        pattern=pattern, alpha=alpha)
                     else:
                         if b_struct=='encoder' or b_struct=='UNet':
                             inputs_bd[xx] = add_encoder_gen(inputs=inputs_bd[xx].unsqueeze(0).to(device), 
@@ -2190,4 +2194,7 @@ def BvB_step4(dl_root, model, attack, label_backdoor, B, b_struct,
             ACC_, ASR_ = test_asr_acc_batt(dl_te=dl_te, model=model, 
                 label_backdoor=label_backdoor,
                 rotation=rotation, device=device)
+        elif attack=='Blend':
+            ACC_, ASR_ = test_asr_acc_blended(dl_te=dl_te, model=model,
+                            label_backdoor=label_backdoor, pattern=pattern, device=device, alpha=alpha)
         test_acc(dl_te=dl_root, model=model, device=device)
