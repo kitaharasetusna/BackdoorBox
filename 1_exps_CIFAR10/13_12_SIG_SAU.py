@@ -31,8 +31,8 @@ exp_dir = '../experiments/exp6_FI_B/SIG'
 label_backdoor = 6
 bs_tr = 128; epoch_BATT = 100; lr_BATT = 1e-3
 sig_delta = 40; sig_f = 6
-lr_ft = 1e-5
-epoch_root = 10 
+lr_ft = 1e-4
+epoch_root = 15 
 
 beta_1 = 0.01; beta_2 = 1; trigger_norm = 0.2; norm_type = 'L_inf'
 adv_lr = 0.2; adv_steps = 5; pgd_init = 'max'; outer_steps = 1
@@ -176,7 +176,7 @@ for round in range(epoch_root):
 
             # delete the useless variable to save memory
             del logits, logits_ref, per_logits, per_logits_ref, loss_cl, loss_at, loss_shared, loss
-    
+    print(f'epoch: {round+1}') 
     ACC_, ASR_ = utils_attack.test_asr_acc_sig(dl_te=dl_te, model=model,
                                                    label_backdoor=label_backdoor,
                                                    delta=sig_delta, freq=sig_f, device=device) 
